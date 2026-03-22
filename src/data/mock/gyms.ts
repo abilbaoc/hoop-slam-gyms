@@ -1,0 +1,43 @@
+import type { Gym } from '../../types/gym';
+
+export const gyms: Gym[] = [
+  {
+    id: 'gym-001',
+    name: 'Polideportivo Municipal BCN',
+    slug: 'polideportivo-bcn',
+    address: 'Carrer de la Marina, 45',
+    city: 'Barcelona, Gracia',
+    timezone: 'Europe/Madrid',
+    phone: '+34 93 123 4567',
+    email: 'info@polideportivo-bcn.es',
+    openingHours: { weekdayOpen: '08:00', weekdayClose: '22:00', weekendOpen: '09:00', weekendClose: '21:00' },
+    courts: ['court-001', 'court-002'],
+    createdAt: '2024-01-15T10:00:00Z',
+  },
+  {
+    id: 'gym-002',
+    name: 'Pabellon Joan Miro',
+    slug: 'pabellon-joan-miro',
+    address: 'Avinguda de Mistral, 23',
+    city: 'Barcelona, Eixample',
+    timezone: 'Europe/Madrid',
+    phone: '+34 93 234 5678',
+    email: 'contacto@joanmiro.es',
+    openingHours: { weekdayOpen: '07:00', weekdayClose: '23:00', weekendOpen: '08:00', weekendClose: '22:00' },
+    courts: ['court-003', 'court-004', 'court-005'],
+    createdAt: '2024-02-20T10:00:00Z',
+  },
+  {
+    id: 'gym-003',
+    name: 'Complejo Deportivo Mar Bella',
+    slug: 'complejo-mar-bella',
+    address: 'Passeig Maritim de la Mar Bella, 10',
+    city: 'Barcelona, Sant Marti',
+    timezone: 'Europe/Madrid',
+    phone: '+34 93 345 6789',
+    email: 'hola@marbella-sports.es',
+    openingHours: { weekdayOpen: '06:00', weekdayClose: '22:00', weekendOpen: '07:00', weekendClose: '21:00' },
+    courts: ['court-006', 'court-007', 'court-008'],
+    createdAt: '2024-04-01T10:00:00Z',
+  },
+];

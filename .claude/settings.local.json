@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(python -m markitdown C:UsersalejaDownloadsHOOP-Deck_revised.pptx)",
+      "Bash(rsync -a --exclude='node_modules' --exclude='dist' --exclude='.git' \"C:\\\\Users\\\\aleja\\\\Documents\\\\RRSS claude\\\\hoop-slam-b2b/\" \"C:\\\\Users\\\\aleja\\\\Documents\\\\SAP gyms/\")",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(where npm.cmd)",
+      "Bash(where npx.cmd)",
+      "Bash(curl -s http://localhost:5175)",
+      "Bash(npx tsc:*)",
+      "Bash(git --version)"
+    ]
+  }
+}

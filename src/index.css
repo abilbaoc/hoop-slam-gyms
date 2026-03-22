@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #000000;
+  --color-bg-card: #1C1C1E;
+  --color-bg-card-hover: #2C2C2E;
+  --color-bg-sidebar: #0A0A0F;
+  --color-bg-input: #2C2C2E;
+
+  --color-accent: #7BFF00;
+  --color-accent-dim: #5ABF00;
+  --color-accent-glow: rgba(123, 255, 0, 0.15);
+
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #8E8E93;
+  --color-text-tertiary: #636366;
+
+  --color-border: #2C2C2E;
+  --color-border-accent: #7BFF00;
+
+  --color-success: #34C759;
+  --color-warning: #FF9F0A;
+  --color-error: #FF453A;
+
+  --color-chart-1: #7BFF00;
+  --color-chart-2: #00D4FF;
+  --color-chart-3: #FF6B6B;
+  --color-chart-4: #FFD93D;
+  --color-chart-5: #C084FC;
+
+  --font-sans: "Poppins", system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Poppins", system-ui, sans-serif;
+
+  --radius-card: 14px;
+  --radius-button: 10px;
+  --radius-badge: 6px;
+
+  --spacing-sidebar: 260px;
+  --spacing-sidebar-collapsed: 72px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2C2C2E #000000;
+}
+
+body {
+  margin: 0;
+  background-color: #000000;
+  color: #FFFFFF;
+  font-family: "Poppins", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Barlow Condensed for all headings */
+h1, h2, h3 {
+  font-family: "Barlow Condensed", "Poppins", system-ui, sans-serif;
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+/* Utility class for display font (KPI values, brand text, etc.) */
+.font-display {
+  font-family: "Barlow Condensed", "Poppins", system-ui, sans-serif !important;
+  font-weight: 800 !important;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+/* Non-italic variant */
+.font-display-upright {
+  font-family: "Barlow Condensed", "Poppins", system-ui, sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #2C2C2E;
+  border-radius: 3px;
+}
