@@ -144,17 +144,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       if (error.message.includes('already registered')) return { error: 'Este email ya esta registrado' };
-      return { error: 'Error al crear la cuenta. Intenta de nuevo.' };
+      if (error.message.includes('Signups not allowed')) return { error: 'El registro esta deshabilitado en Supabase. Activa "Enable Sign Up" en Authentication > Settings.' };
+      return { error: `Error: ${error.message}` };
     }
 
     // Create profile explicitly (don't rely on trigger)
     if (data.user) {
-      await supabase.from('profiles').upsert({
-        id: data.user.id,
-        name,
-        role: 'gestor',
-        gym_ids: [],
-      });
+      try {
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          name,
+          role: 'gestor',
+          gym_ids: [],
+        });
+      } catch {
+        // Profile creation may fail due to RLS, the trigger will create it
+      }
     }
 
     return { needsOnboarding: true, needsEmailConfirmation: !data.session };
