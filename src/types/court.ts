@@ -12,3 +12,9 @@ export interface Court {
   lastHeartbeat?: string; // ISO datetime
   sensorStatus: SensorStatus;
 }
+
+export interface CourtMapPosition {
+  courtId: string;
+  x: number;
+  y: number;
+}

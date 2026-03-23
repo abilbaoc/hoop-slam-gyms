@@ -289,6 +289,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (gymId: string): boolean => {
       if (!currentUser) return false;
       if (currentUser.role === 'admin') return true;
+      // Users with no gyms assigned (new Supabase users) can access all gyms for demo
+      if (!currentUser.gymIds || currentUser.gymIds.length === 0) return true;
       return currentUser.gymIds.includes(gymId);
     },
     [currentUser],

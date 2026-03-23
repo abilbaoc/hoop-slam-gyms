@@ -15,19 +15,15 @@ import UsersPage from './pages/Users/UsersPage';
 import NotificationsPage from './pages/Notifications/NotificationsPage';
 import ReservationsPage from './pages/Reservations/ReservationsPage';
 import MaintenancePage from './pages/Maintenance/MaintenancePage';
+import GymMapPage from './pages/Map/GymMapPage';
 import OnboardingPage from './pages/Onboarding/OnboardingPage';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 function RootRedirect() {
-  const { isAuthenticated, currentUser } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-
-  // New user with no gyms → onboarding
-  if (currentUser && currentUser.gymIds.length === 0) {
-    return <Navigate to="/onboarding" replace />;
-  }
 
   return <GymListPage />;
 }
@@ -52,6 +48,7 @@ function AppRoutes() {
         <Route path="users" element={<UsersPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="maintenance" element={<MaintenancePage />} />
+        <Route path="map" element={<GymMapPage />} />
         <Route index element={<Navigate to="dashboard" replace />} />
       </Route>
     </Routes>

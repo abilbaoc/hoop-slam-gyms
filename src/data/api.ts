@@ -395,6 +395,8 @@ export async function getUnreadNotificationCount(gymId: string): Promise<number>
 // ── Maintenance ──
 
 import type { MaintenanceTicket, MaintenanceLog } from '../types/maintenance';
+import type { CourtMapPosition } from '../types/court';
+import { courtPositions } from './mock/courtPositions';
 
 export async function getMaintenanceTickets(gymId: string): Promise<{ tickets: MaintenanceTicket[]; logs: MaintenanceLog[] }> {
   await delay();
@@ -423,4 +425,25 @@ export async function getMaintenanceStats(gymId: string): Promise<{
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const resolvedThisMonth = tickets.filter(t => t.resolvedAt && t.resolvedAt >= monthStart).length;
   return { open, critical, avgResolutionHours, resolvedThisMonth };
+}
+
+// ── Court Map Positions ──
+
+export async function getCourtPositions(gymId: string): Promise<CourtMapPosition[]> {
+  await delay();
+  const gymCourts = courts.filter(c => c.gymId === gymId);
+  return gymCourts.map(c => {
+    const pos = courtPositions.find(p => p.courtId === c.id);
+    return pos || { courtId: c.id, x: 50, y: 50 };
+  });
+}
+
+export async function updateCourtPosition(courtId: string, x: number, y: number): Promise<void> {
+  await delay();
+  const idx = courtPositions.findIndex(p => p.courtId === courtId);
+  if (idx >= 0) {
+    courtPositions[idx] = { courtId, x, y };
+  } else {
+    courtPositions.push({ courtId, x, y });
+  }
 }

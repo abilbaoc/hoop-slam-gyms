@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import Card from '../../components/ui/Card';
 import FormatBadge from '../../components/shared/FormatBadge';
+import ExportButton from '../../components/shared/ExportButton';
 import { useGym } from '../../contexts/GymContext';
 import { getMatches, getCourts } from '../../data/api';
 import type { Match, Court } from '../../types';
 import { formatDateTime, formatDuration } from '../../utils/formatters';
 import SyncStatusBadge from '../../components/shared/SyncStatusBadge';
+import { toast } from 'sonner';
+import { exportMatchesCSV } from '../../utils/export';
 
 export default function MatchesPage() {
   const { currentGym } = useGym();
@@ -40,7 +43,13 @@ export default function MatchesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 items-center">
+        <ExportButton
+          onExportCSV={() => {
+            exportMatchesCSV(filtered, courtMap);
+            toast.success('Partidos exportados correctamente');
+          }}
+        />
         <select
           value={formatFilter}
           onChange={(e) => setFormatFilter(e.target.value)}

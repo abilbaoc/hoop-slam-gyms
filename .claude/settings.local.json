@@ -11,7 +11,9 @@
       "Bash(where npx.cmd)",
       "Bash(curl -s http://localhost:5175)",
       "Bash(npx tsc:*)",
-      "Bash(git --version)"
+      "Bash(git --version)",
+      "Bash(gh repo:*)",
+      "Bash(curl -s -X POST \"https://afhxzrnylpvjgtlewflq.supabase.co/rest/v1/rpc\" -H \"apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFmaHh6cm55bHB2amd0bGV3ZmxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMTM2MjIsImV4cCI6MjA4OTc4OTYyMn0.LTY5zHxcqPDUaRfRkJ9xCxo3suZD9Tc7Te9qkFhE2Gw\" -H \"Content-Type: application/json\")"
     ]
   }
 }

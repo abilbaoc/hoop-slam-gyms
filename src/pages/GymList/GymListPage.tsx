@@ -13,7 +13,9 @@ export default function GymListPage() {
   const navigate = useNavigate();
 
   // Filter gyms the user can access
-  const accessibleGyms = currentUser?.role === 'admin'
+  // If user has no gyms assigned (new Supabase user), show all gyms for demo purposes
+  const hasNoGyms = !currentUser?.gymIds || currentUser.gymIds.length === 0;
+  const accessibleGyms = currentUser?.role === 'admin' || hasNoGyms
     ? gyms
     : gyms.filter((g) => currentUser?.gymIds.includes(g.id));
 

@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import FormatBadge from '../../components/shared/FormatBadge';
+import ExportButton from '../../components/shared/ExportButton';
 import { useGym } from '../../contexts/GymContext';
 import { getPlayers } from '../../data/api';
 import type { Player } from '../../types';
 import { formatDate, formatELO } from '../../utils/formatters';
+import { toast } from 'sonner';
+import { exportPlayersCSV } from '../../utils/export';
 
 const recurrenceVariant: Record<string, 'green' | 'blue' | 'yellow' | 'gray'> = {
   diario: 'green',
@@ -65,7 +68,13 @@ export default function PlayersPage() {
       </div>
 
       {/* Sort */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 items-center">
+        <ExportButton
+          onExportCSV={() => {
+            exportPlayersCSV(sorted);
+            toast.success('Jugadores exportados correctamente');
+          }}
+        />
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}

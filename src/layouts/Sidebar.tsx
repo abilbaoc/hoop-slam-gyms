@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   MapPin,
+  Map,
   Swords,
   Users,
   FileText,
@@ -30,6 +31,7 @@ export default function Sidebar() {
   const navItems = [
     { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Dashboard', show: true },
     { to: `${prefix}/courts`, icon: MapPin, label: 'Canchas', show: true },
+    { to: `${prefix}/map`, icon: Map, label: 'Mapa', show: true },
     { to: `${prefix}/matches`, icon: Swords, label: 'Partidos', show: canViewAnalytics },
     { to: `${prefix}/players`, icon: Users, label: 'Jugadores', show: canViewAnalytics },
     { to: `${prefix}/reservations`, icon: Calendar, label: 'Reservas', show: true },

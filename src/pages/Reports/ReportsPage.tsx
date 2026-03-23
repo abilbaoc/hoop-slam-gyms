@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
-import { FileText, Sparkles, Download, Plus, Minus, Pencil } from 'lucide-react';
+import { FileText, FileBarChart, Sparkles, Download, Plus, Minus, Pencil, Loader2 } from 'lucide-react';
 import Card from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
 import { Tabs } from '../../components/ui/Tabs';
 import { useGym } from '../../contexts/GymContext';
-import { getAuditEntries } from '../../data/api';
+import { getAuditEntries, getMatches, getReservations, getPlayers, getCourts, getKPIs, getDailyMatchesData, getCourtOccupancyData, getFormatDistributionData } from '../../data/api';
 import type { AuditEntry } from '../../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { toast } from 'sonner';
+import { exportMatchesCSV, exportPlayersCSV, exportReservationsCSV, exportAuditCSV, exportWeeklySummaryPDF } from '../../utils/export';
 
 function ActionIcon({ action }: { action: AuditEntry['action'] }) {
   if (action === 'create') return <Plus size={14} className="text-[#34C759]" />;
@@ -107,17 +110,112 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {tab === 'export' && (
-        <div className="flex flex-col items-center justify-center py-20">
-          <div className="w-16 h-16 rounded-2xl bg-[#7BFF00]/10 flex items-center justify-center mb-6">
-            <Download size={32} className="text-[#7BFF00]" />
-          </div>
-          <h2 className="text-xl font-bold text-white mb-2">Exportar Datos</h2>
-          <p className="text-sm text-[#8E8E93] text-center max-w-md">
-            Proximamente podras exportar datos en CSV y PDF para compartir con tu equipo o presentar a clientes.
-          </p>
+      {tab === 'export' && <ExportTab gymId={currentGym?.id} gymName={currentGym?.name} />}
+    </div>
+  );
+}
+
+// ── Export tab ──
+
+interface ExportCardProps {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onExport: () => Promise<void>;
+}
+
+function ExportCard({ icon, title, description, onExport }: ExportCardProps) {
+  const [loading, setLoading] = useState(false);
+
+  const handleClick = async () => {
+    setLoading(true);
+    try {
+      await onExport();
+      toast.success(`${title} exportado correctamente`);
+    } catch {
+      toast.error('Error al exportar');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card className="flex flex-col gap-4">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-[#7BFF00]/10 flex items-center justify-center flex-shrink-0">
+          {icon}
         </div>
-      )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-white">{title}</p>
+          <p className="text-xs text-[#8E8E93] mt-0.5">{description}</p>
+        </div>
+      </div>
+      <Button variant="secondary" size="sm" onClick={handleClick} disabled={loading}>
+        {loading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+        Descargar
+      </Button>
+    </Card>
+  );
+}
+
+function ExportTab({ gymId, gymName }: { gymId?: string; gymName?: string }) {
+  const buildCourtMap = async () => {
+    const courts = await getCourts(gymId);
+    return Object.fromEntries(courts.map(c => [c.id, c.name])) as Record<string, string>;
+  };
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <ExportCard
+        icon={<FileText size={20} className="text-[#7BFF00]" />}
+        title="Partidos"
+        description="Exportar historial de partidos en formato CSV"
+        onExport={async () => {
+          const [matches, courtMap] = await Promise.all([getMatches({ gymId }), buildCourtMap()]);
+          exportMatchesCSV(matches, courtMap);
+        }}
+      />
+      <ExportCard
+        icon={<FileText size={20} className="text-[#7BFF00]" />}
+        title="Reservas"
+        description="Exportar reservas en formato CSV"
+        onExport={async () => {
+          const [reservations, courtMap] = await Promise.all([getReservations({ gymId }), buildCourtMap()]);
+          exportReservationsCSV(reservations, courtMap);
+        }}
+      />
+      <ExportCard
+        icon={<FileText size={20} className="text-[#7BFF00]" />}
+        title="Jugadores"
+        description="Exportar jugadores registrados en formato CSV"
+        onExport={async () => {
+          const players = await getPlayers(gymId);
+          exportPlayersCSV(players);
+        }}
+      />
+      <ExportCard
+        icon={<FileText size={20} className="text-[#7BFF00]" />}
+        title="Auditoria"
+        description="Exportar log de actividad en formato CSV"
+        onExport={async () => {
+          const entries = await getAuditEntries(gymId);
+          exportAuditCSV(entries);
+        }}
+      />
+      <ExportCard
+        icon={<FileBarChart size={20} className="text-[#7BFF00]" />}
+        title="Resumen Semanal"
+        description="Reporte PDF con KPIs, partidos y ocupacion"
+        onExport={async () => {
+          const [kpis, daily, occupancy, formats] = await Promise.all([
+            getKPIs(gymId),
+            getDailyMatchesData(7, gymId),
+            getCourtOccupancyData(gymId),
+            getFormatDistributionData(gymId),
+          ]);
+          exportWeeklySummaryPDF(kpis, daily, occupancy, formats, gymName || 'Gimnasio');
+        }}
+      />
     </div>
   );
 }
