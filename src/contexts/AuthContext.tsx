@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import type { AppUser, UserRole, Permission } from '../types/auth';
 import { ROLE_PERMISSIONS } from '../types/auth';
 import { users as mockUsers } from '../data/mock/users';
@@ -14,7 +14,6 @@ interface AuthContextValue {
   hasPermission: (p: Permission) => boolean;
   canAccessGym: (gymId: string) => boolean;
   updateUserGymIds: (gymIds: string[]) => void;
-  // Mock-only (available when Supabase not configured)
   loginMock?: (role: UserRole, gymId?: string) => void;
 }
 
@@ -35,37 +34,137 @@ const STORAGE_KEY = 'hoop-auth-user';
 function getInitials(name: string): string {
   return name
     .split(' ')
+    .filter(Boolean)
     .map((w) => w[0])
     .join('')
     .toUpperCase()
-    .slice(0, 2);
+    .slice(0, 2) || '??';
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isSigningOut = useRef(false);
+  const profileCache = useRef<Map<string, AppUser>>(new Map());
+
+  // ── Supabase: fetch profile with caching and error resilience ──
+  async function fetchProfile(userId: string, email: string): Promise<AppUser | null> {
+    if (!supabase) return null;
+
+    // Return cached version if available
+    const cached = profileCache.current.get(userId);
+
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.warn('[Auth] Profile fetch error:', error.message);
+        // Return cached version or create default - don't return null
+        if (cached) return cached;
+        return buildDefaultUser(userId, email);
+      }
+
+      if (profile) {
+        const role = (profile.role as UserRole) || 'gestor';
+        const user: AppUser = {
+          id: userId,
+          name: profile.name || email.split('@')[0],
+          email,
+          role,
+          gymIds: profile.gym_ids || [],
+          permissions: ROLE_PERMISSIONS[role],
+          lastActiveAt: new Date().toISOString(),
+          avatarInitials: getInitials(profile.name || email),
+        };
+        profileCache.current.set(userId, user);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+        return user;
+      }
+
+      if (cached) return cached;
+      return buildDefaultUser(userId, email);
+    } catch (err) {
+      console.warn('[Auth] Profile fetch exception:', err);
+      if (cached) return cached;
+      return buildDefaultUser(userId, email);
+    }
+  }
+
+  function buildDefaultUser(userId: string, email: string): AppUser {
+    const user: AppUser = {
+      id: userId,
+      name: email.split('@')[0],
+      email,
+      role: 'gestor',
+      gymIds: [],
+      permissions: ROLE_PERMISSIONS.gestor,
+      lastActiveAt: new Date().toISOString(),
+      avatarInitials: getInitials(email),
+    };
+    profileCache.current.set(userId, user);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    return user;
+  }
 
   // ── Initialize ──
   useEffect(() => {
     if (isSupabaseConfigured && supabase) {
-      // Supabase mode: check existing session
+      // Try to restore from localStorage first for instant UI
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setCurrentUser(parsed);
+          profileCache.current.set(parsed.id, parsed);
+        }
+      } catch { /* ignore */ }
+
+      // Then verify with Supabase
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session?.user) {
           fetchProfile(session.user.id, session.user.email ?? '').then((user) => {
-            setCurrentUser(user);
+            if (user) setCurrentUser(user);
             setIsLoading(false);
           });
         } else {
+          // No active session — clear cached user
+          setCurrentUser(null);
+          localStorage.removeItem(STORAGE_KEY);
+          profileCache.current.clear();
           setIsLoading(false);
         }
       });
 
-      // Listen for auth changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session?.user) {
-          fetchProfile(session.user.id, session.user.email ?? '').then(setCurrentUser);
-        } else {
+      // Listen for auth changes — but be careful about what we clear
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        console.log('[Auth] State change:', event);
+
+        if (event === 'SIGNED_OUT') {
           setCurrentUser(null);
+          localStorage.removeItem(STORAGE_KEY);
+          profileCache.current.clear();
+          return;
+        }
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            fetchProfile(session.user.id, session.user.email ?? '').then((user) => {
+              if (user) setCurrentUser(user);
+            });
+          }
+          return;
+        }
+
+        // For other events (INITIAL_SESSION, USER_UPDATED, etc.)
+        // only update if we have a session, never clear
+        if (session?.user) {
+          fetchProfile(session.user.id, session.user.email ?? '').then((user) => {
+            if (user) setCurrentUser(user);
+          });
         }
       });
 
@@ -82,44 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ── Supabase: fetch profile from profiles table ──
-  async function fetchProfile(userId: string, email: string): Promise<AppUser> {
-    if (!supabase) throw new Error('Supabase not configured');
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (profile) {
-      const role = (profile.role as UserRole) || 'gestor';
-      return {
-        id: userId,
-        name: profile.name || email.split('@')[0],
-        email,
-        role,
-        gymIds: profile.gym_ids || [],
-        permissions: ROLE_PERMISSIONS[role],
-        lastActiveAt: new Date().toISOString(),
-        avatarInitials: getInitials(profile.name || email),
-      };
-    }
-
-    // No profile yet (new user) — return default gestor with no gyms
-    return {
-      id: userId,
-      name: email.split('@')[0],
-      email,
-      role: 'gestor',
-      gymIds: [],
-      permissions: ROLE_PERMISSIONS.gestor,
-      lastActiveAt: new Date().toISOString(),
-      avatarInitials: getInitials(email),
-    };
-  }
-
-  // ── Sign In (Supabase) ──
+  // ── Sign In ──
   const signIn = useCallback(async (email: string, password: string): Promise<{ error?: string }> => {
     if (!supabase) return { error: 'Supabase no configurado' };
 
@@ -132,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {};
   }, []);
 
-  // ── Sign Up (Supabase) ──
+  // ── Sign Up ──
   const signUp = useCallback(async (email: string, password: string, name: string): Promise<{ error?: string; needsOnboarding?: boolean; needsEmailConfirmation?: boolean }> => {
     if (!supabase) return { error: 'Supabase no configurado' };
 
@@ -144,11 +206,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       if (error.message.includes('already registered')) return { error: 'Este email ya esta registrado' };
-      if (error.message.includes('Signups not allowed')) return { error: 'El registro esta deshabilitado en Supabase. Activa "Enable Sign Up" en Authentication > Settings.' };
+      if (error.message.includes('Signups not allowed')) return { error: 'El registro esta deshabilitado. Activa "Enable Sign Up" en Supabase.' };
       return { error: `Error: ${error.message}` };
     }
 
-    // Create profile explicitly (don't rely on trigger)
+    // Create profile explicitly
     if (data.user) {
       try {
         await supabase.from('profiles').upsert({
@@ -158,8 +220,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           gym_ids: [],
         });
       } catch {
-        // Profile creation may fail due to RLS, the trigger will create it
+        // Trigger will handle it
       }
+
+      // Also set user locally right away so they don't get kicked to login
+      const user = buildDefaultUser(data.user.id, email);
+      user.name = name;
+      user.avatarInitials = getInitials(name);
+      setCurrentUser(user);
     }
 
     return { needsOnboarding: true, needsEmailConfirmation: !data.session };
@@ -167,11 +235,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Sign Out ──
   const handleSignOut = useCallback(async () => {
+    isSigningOut.current = true;
     if (supabase) {
       await supabase.auth.signOut();
     }
     setCurrentUser(null);
     localStorage.removeItem(STORAGE_KEY);
+    profileCache.current.clear();
+    isSigningOut.current = false;
   }, []);
 
   // ── Mock Login ──
@@ -189,12 +260,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ── Update user gym IDs (for onboarding) ──
+  // ── Update gym IDs (onboarding) ──
   const updateUserGymIds = useCallback((gymIds: string[]) => {
     setCurrentUser((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, gymIds };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      profileCache.current.set(updated.id, updated);
+
+      // Also update in Supabase if configured
+      if (supabase && isSupabaseConfigured) {
+        supabase.from('profiles').update({ gym_ids: gymIds }).eq('id', updated.id).then(({ error }) => {
+          if (error) console.warn('[Auth] Failed to update gym_ids in Supabase:', error.message);
+        });
+      }
+
       return updated;
     });
   }, []);
