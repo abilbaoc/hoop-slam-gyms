@@ -17,6 +17,8 @@ import ReservationsPage from './pages/Reservations/ReservationsPage';
 import MaintenancePage from './pages/Maintenance/MaintenancePage';
 import GymMapPage from './pages/Map/GymMapPage';
 import OnboardingPage from './pages/Onboarding/OnboardingPage';
+import PrivacyPolicyPage from './pages/Privacy/PrivacyPolicyPage';
+import CookieBanner from './components/ui/CookieBanner';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -34,6 +36,7 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route path="/" element={<RootRedirect />} />
       <Route path="/gym/:gymId" element={<GymLayout />}>
         <Route path="dashboard" element={<OverviewPage />} />
@@ -70,6 +73,7 @@ export default function App() {
           }}
         />
         <AppRoutes />
+        <CookieBanner />
       </BrowserRouter>
     </AuthProvider>
   );
