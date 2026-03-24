@@ -61,6 +61,13 @@ export default function CourtsPage() {
       firmwareVersion: 'v2.1.3',
       lastHeartbeat: new Date().toISOString(),
       sensorStatus: 'ok',
+      is_active: true,
+      address: formLocation || '',
+      opening_time: '09:00',
+      closing_time: '21:00',
+      is_visible: true,
+      match_duration_minutes: 20,
+      slot_duration_minutes: 30,
     });
     setShowCreate(false);
     toast.success('Canasta creada');

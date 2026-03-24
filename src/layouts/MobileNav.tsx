@@ -3,8 +3,8 @@ import {
   LayoutDashboard,
   MapPin,
   Calendar,
-  Bell,
-  MoreHorizontal,
+  Wrench,
+  UserCog,
 } from 'lucide-react';
 import { useGymLayout } from './GymLayout';
 
@@ -14,10 +14,10 @@ export default function MobileNav() {
 
   const mobileNavItems = [
     { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Dashboard' },
-    { to: `${prefix}/courts`, icon: MapPin, label: 'Canchas' },
+    { to: `${prefix}/courts`, icon: MapPin, label: 'Cestas' },
     { to: `${prefix}/reservations`, icon: Calendar, label: 'Reservas' },
-    { to: `${prefix}/notifications`, icon: Bell, label: 'Alertas' },
-    { to: `${prefix}/settings`, icon: MoreHorizontal, label: 'Mas' },
+    { to: `${prefix}/users`, icon: UserCog, label: 'Miembros' },
+    { to: `${prefix}/maintenance`, icon: Wrench, label: 'Incidencias' },
   ];
 
   return (

@@ -39,7 +39,20 @@ import { gyms } from './mock/gyms';
 import { users } from './mock/users';
 import { notifications } from './mock/notifications';
 import { getAuditLog, addAuditEntry } from './mock/audit';
-import { maintenanceTickets, maintenanceLogs } from './mock/maintenance';
+import { maintenanceTicketsWithHoop as maintenanceTickets, maintenanceLogs } from './mock/maintenance-hoop';
+import type { CourtSlot } from '../types/slot';
+import type { ClubMember } from '../types/club_member';
+import type { StatsOverview, DailyStats } from '../types/stats';
+import { courtSlots as courtSlotsData } from './mock/court_slots';
+import { clubMembers as clubMembersData } from './mock/club_members';
+import { isFirebaseConfigured } from '../lib/firebase';
+import {
+  fbGetGyms, fbGetGymById, fbGetCourts,
+  fbGetMatches, fbGetReservations,
+  fbGetClubMembers, fbGetStatsOverview, fbGetDailyStats,
+} from './firebaseProvider';
+
+const USE_FIREBASE = import.meta.env.VITE_DATA_SOURCE === 'firebase' && isFirebaseConfigured;
 
 function delay(): Promise<void> {
   const ms = 50 + Math.random() * 100;
@@ -55,6 +68,7 @@ function getGymCourtIds(gymId?: string): Set<string> | null {
 // ── Gyms ──
 
 export async function getGyms(): Promise<Gym[]> {
+  if (USE_FIREBASE) return fbGetGyms();
   await delay();
   return gyms;
 }
@@ -62,6 +76,7 @@ export async function getGyms(): Promise<Gym[]> {
 // ── Courts ──
 
 export async function getCourts(gymId?: string): Promise<Court[]> {
+  if (USE_FIREBASE) return fbGetCourts(gymId);
   await delay();
   const ids = getGymCourtIds(gymId);
   return ids ? courts.filter((c) => ids.has(c.id)) : courts;
@@ -103,6 +118,7 @@ export async function getMatches(filters?: {
   days?: number;
   gymId?: string;
 }): Promise<Match[]> {
+  if (USE_FIREBASE) return fbGetMatches(filters);
   await delay();
   let result = matches;
   const ids = getGymCourtIds(filters?.gymId);
@@ -284,6 +300,7 @@ export async function getReservations(filters?: {
   status?: ReservationStatus;
   gymId?: string;
 }): Promise<Reservation[]> {
+  if (USE_FIREBASE) return fbGetReservations(filters);
   await delay();
   let result = reservations;
   const ids = getGymCourtIds(filters?.gymId);
@@ -354,6 +371,7 @@ export async function getUsers(gymId?: string): Promise<AppUser[]> {
 }
 
 export async function getGymById(id: string): Promise<Gym | undefined> {
+  if (USE_FIREBASE) return fbGetGymById(id);
   await delay();
   return gyms.find(g => g.id === id);
 }
@@ -394,11 +412,10 @@ export async function getUnreadNotificationCount(gymId: string): Promise<number>
 
 // ── Maintenance ──
 
-import type { MaintenanceTicket, MaintenanceLog } from '../types/maintenance';
-import type { CourtMapPosition } from '../types/court';
-import { courtPositions } from './mock/courtPositions';
+import type { MaintenanceLog } from '../types/maintenance';
+import type { MaintenanceTicketWithHoop } from '../types/maintenance-hoop';
 
-export async function getMaintenanceTickets(gymId: string): Promise<{ tickets: MaintenanceTicket[]; logs: MaintenanceLog[] }> {
+export async function getMaintenanceTickets(gymId: string): Promise<{ tickets: MaintenanceTicketWithHoop[]; logs: MaintenanceLog[] }> {
   await delay();
   const tickets = maintenanceTickets.filter(t => t.gymId === gymId);
   const ticketIds = new Set(tickets.map(t => t.id));
@@ -427,23 +444,110 @@ export async function getMaintenanceStats(gymId: string): Promise<{
   return { open, critical, avgResolutionHours, resolvedThisMonth };
 }
 
-// ── Court Map Positions ──
+// ── Stats (new scope) ──
 
-export async function getCourtPositions(gymId: string): Promise<CourtMapPosition[]> {
-  await delay();
-  const gymCourts = courts.filter(c => c.gymId === gymId);
-  return gymCourts.map(c => {
-    const pos = courtPositions.find(p => p.courtId === c.id);
-    return pos || { courtId: c.id, x: 50, y: 50 };
-  });
-}
-
-export async function updateCourtPosition(courtId: string, x: number, y: number): Promise<void> {
-  await delay();
-  const idx = courtPositions.findIndex(p => p.courtId === courtId);
-  if (idx >= 0) {
-    courtPositions[idx] = { courtId, x, y };
-  } else {
-    courtPositions.push({ courtId, x, y });
+export async function getStatsOverview(gymId: string): Promise<StatsOverview> {
+  if (USE_FIREBASE) {
+    const courtIds = (await fbGetCourts(gymId)).map(c => c.id);
+    return fbGetStatsOverview(gymId, courtIds);
   }
+  await delay();
+  const ids = getGymCourtIds(gymId);
+  const gymReservations = ids ? reservations.filter((r) => ids.has(r.courtId)) : reservations;
+  const gymMatches = ids ? matches.filter((m) => ids.has(m.courtId)) : matches;
+  const now = new Date();
+  return {
+    reservas_hechas: gymReservations.filter((r) => r.status === 'confirmed').length,
+    reservas_iniciadas: gymReservations.filter((r) => {
+      if (r.status !== 'confirmed') return false;
+      return new Date(`${r.date}T${r.startTime}`) <= now;
+    }).length,
+    reservas_canceladas: gymReservations.filter((r) => r.status === 'cancelled').length,
+    partidos_jugados: gymMatches.length,
+    partidos_cancelados: 0,
+  };
 }
+
+export async function getDailyStats(gymId: string, days: number): Promise<DailyStats[]> {
+  if (USE_FIREBASE) {
+    const courtIds = (await fbGetCourts(gymId)).map(c => c.id);
+    return fbGetDailyStats(gymId, courtIds, days);
+  }
+  await delay();
+  const ids = getGymCourtIds(gymId);
+  const gymReservations = ids ? reservations.filter((r) => ids.has(r.courtId)) : reservations;
+  const gymMatches = ids ? matches.filter((m) => ids.has(m.courtId)) : matches;
+  const result: DailyStats[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000);
+    const dateStr = d.toISOString().slice(0, 10);
+    result.push({
+      date: dateStr,
+      reservations: gymReservations.filter((r) => r.date === dateStr).length,
+      matches: gymMatches.filter((m) => m.startedAt.slice(0, 10) === dateStr).length,
+    });
+  }
+  return result;
+}
+
+// ── Court Slots ──
+
+export async function getCourtSlots(courtId: string, date: string): Promise<CourtSlot[]> {
+  await delay();
+  return courtSlotsData.filter((s) => s.courtId === courtId && s.date === date);
+}
+
+export async function createCourtSlot(data: Omit<CourtSlot, 'id' | 'createdAt'>): Promise<CourtSlot> {
+  await delay();
+  const slot: CourtSlot = {
+    ...data,
+    id: `slot-${String(courtSlotsData.length + 1).padStart(3, '0')}`,
+    createdAt: new Date().toISOString(),
+  };
+  courtSlotsData.push(slot);
+  return slot;
+}
+
+export async function updateCourtSlot(id: string, data: Partial<CourtSlot>): Promise<CourtSlot> {
+  await delay();
+  const idx = courtSlotsData.findIndex((s) => s.id === id);
+  if (idx === -1) throw new Error('Court slot not found');
+  courtSlotsData[idx] = { ...courtSlotsData[idx], ...data };
+  return courtSlotsData[idx];
+}
+
+export async function deleteCourtSlot(id: string): Promise<void> {
+  await delay();
+  const idx = courtSlotsData.findIndex((s) => s.id === id);
+  if (idx === -1) throw new Error('Court slot not found');
+  courtSlotsData.splice(idx, 1);
+}
+
+export async function createGym(data: { name: string; city: string; address?: string }): Promise<Gym> {
+  await delay();
+  const newGym: Gym = {
+    id: `gym-${String(gyms.length + 1).padStart(3, '0')}`,
+    name: data.name,
+    slug: data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+    address: data.address ?? '',
+    city: data.city,
+    timezone: 'Europe/Madrid',
+    phone: '',
+    email: '',
+    openingHours: { weekdayOpen: '09:00', weekdayClose: '21:00', weekendOpen: '10:00', weekendClose: '20:00' },
+    courts: [],
+    createdAt: new Date().toISOString(),
+  };
+  gyms.push(newGym);
+  addAuditEntry({ action: 'create', entity: 'court', entityId: newGym.id, description: `Creo club "${newGym.name}"` });
+  return newGym;
+}
+
+// ── Club Members ──
+
+export async function getClubMembers(gymId: string): Promise<ClubMember[]> {
+  if (USE_FIREBASE) return fbGetClubMembers(gymId);
+  await delay();
+  return clubMembersData.filter((m) => m.gymId === gymId);
+}
+

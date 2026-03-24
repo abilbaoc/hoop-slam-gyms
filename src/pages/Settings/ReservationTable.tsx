@@ -1,7 +1,6 @@
 import type { Reservation, Court } from '../../types';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
-import FormatBadge from '../../components/shared/FormatBadge';
 
 interface ReservationTableProps {
   reservations: Reservation[];
@@ -59,9 +58,7 @@ export default function ReservationTable({ reservations, courts, onCancel }: Res
                   {courtMap.get(res.courtId) ?? res.courtId}
                 </td>
                 <td className="px-4 py-3 text-sm text-white">{res.playerName}</td>
-                <td className="px-4 py-3">
-                  <FormatBadge format={res.format} />
-                </td>
+                <td className="px-4 py-3 text-sm text-[#8E8E93]">{res.format}</td>
                 <td className="px-4 py-3">
                   <Badge variant={status.variant}>{status.label}</Badge>
                 </td>

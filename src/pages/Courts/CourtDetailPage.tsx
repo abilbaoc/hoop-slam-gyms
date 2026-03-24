@@ -1,58 +1,353 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin } from 'lucide-react';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { ArrowLeft, Dribbble, AlertCircle, Clock } from 'lucide-react';
 import Card from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import Tabs from '../../components/ui/Tabs';
 import CourtStatusBadge from '../../components/shared/CourtStatusBadge';
-import { getCourts, getMatches, getDailyMatchesData } from '../../data/api';
+import Badge from '../../components/ui/Badge';
+import { Modal } from '../../components/ui/Modal';
+import { getCourts, updateCourt, getCourtSlots, createCourtSlot, updateCourtSlot, getMaintenanceTickets } from '../../data/api';
 import { useGym } from '../../contexts/GymContext';
-import type { Court, Match, DailyMatches } from '../../types';
-import { chartColors } from '../../theme/tokens';
-import { formatDate } from '../../utils/formatters';
+import type { Court, CourtSlot } from '../../types';
+import type { MaintenanceTicketWithHoop } from '../../types/maintenance-hoop';
+import { PRIORITY_LABELS, PRIORITY_VARIANTS, STATUS_LABELS, STATUS_VARIANTS } from '../../types/maintenance';
+import { toast } from 'sonner';
+
+// ── Tab: Configuración ──────────────────────────────────────
+
+const TIME_OPTIONS = ['06:00','07:00','08:00','09:00','10:00','11:00','12:00','13:00',
+  '14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00','23:00'];
+const DURATION_OPTIONS = [15, 20, 30, 45, 60, 90, 120];
+
+function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => void }) {
+  const [name, setName] = useState(court.name);
+  const [address, setAddress] = useState(court.address);
+  const [openingTime, setOpeningTime] = useState(court.opening_time);
+  const [closingTime, setClosingTime] = useState(court.closing_time);
+  const [matchDuration, setMatchDuration] = useState(court.match_duration_minutes);
+  const [slotDuration, setSlotDuration] = useState(court.slot_duration_minutes);
+  const [saving, setSaving] = useState(false);
+
+  const handleToggleActive = async () => {
+    const updated = await updateCourt(court.id, { is_active: !court.is_active });
+    onSaved(updated);
+    toast.success(updated.is_active ? 'Canasta activada' : 'Canasta desactivada');
+  };
+
+  const handleToggleVisible = async () => {
+    const updated = await updateCourt(court.id, { is_visible: !court.is_visible });
+    onSaved(updated);
+    toast.success(updated.is_visible ? 'Visible en la app' : 'Ocultada de la app');
+  };
+
+  const handleSave = async () => {
+    if (!name.trim()) return toast.error('El nombre es obligatorio');
+    if (!address.trim()) return toast.error('La dirección es obligatoria');
+    if (openingTime >= closingTime) return toast.error('La apertura debe ser anterior al cierre');
+    if (slotDuration > matchDuration) return toast.error('La duración del slot no puede superar la del partido');
+    setSaving(true);
+    try {
+      const updated = await updateCourt(court.id, { name, address, opening_time: openingTime, closing_time: closingTime, match_duration_minutes: matchDuration, slot_duration_minutes: slotDuration });
+      onSaved(updated);
+      toast.success('Cambios guardados');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectClass = 'bg-[#2C2C2E] text-white text-sm rounded-xl px-3 py-2 border border-[#2C2C2E] outline-none focus:border-[#7BFF00]';
+  const inputClass = 'w-full bg-[#2C2C2E] text-white text-sm rounded-xl px-4 py-2.5 border border-[#2C2C2E] outline-none focus:border-[#7BFF00] placeholder-[#636366]';
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      {/* Estado y visibilidad */}
+      <Card>
+        <h3 className="text-xs font-medium text-[#636366] uppercase mb-4">Estado y visibilidad</h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-white">Canasta activa</span>
+            <button
+              onClick={handleToggleActive}
+              className={`w-11 h-6 rounded-full transition-colors relative ${court.is_active ? 'bg-[#7BFF00]' : 'bg-[#3C3C3E]'}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${court.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-white">Visible en la app</span>
+            <button
+              onClick={handleToggleVisible}
+              className={`w-11 h-6 rounded-full transition-colors relative ${court.is_visible ? 'bg-[#7BFF00]' : 'bg-[#3C3C3E]'}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${court.is_visible ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Información básica */}
+      <Card>
+        <h3 className="text-xs font-medium text-[#636366] uppercase mb-4">Información básica</h3>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-[#8E8E93] mb-1 block">Nombre *</label>
+            <input className={inputClass} value={name} onChange={e => setName(e.target.value)} placeholder="Canasta Norte" />
+          </div>
+          <div>
+            <label className="text-xs text-[#8E8E93] mb-1 block">Dirección *</label>
+            <input className={inputClass} value={address} onChange={e => setAddress(e.target.value)} placeholder="Calle, número, ciudad" />
+          </div>
+        </div>
+      </Card>
+
+      {/* Horario */}
+      <Card>
+        <h3 className="text-xs font-medium text-[#636366] uppercase mb-4">Horario de apertura</h3>
+        <div className="flex items-center gap-4">
+          <div>
+            <label className="text-xs text-[#8E8E93] mb-1 block">Apertura</label>
+            <select className={selectClass} value={openingTime} onChange={e => setOpeningTime(e.target.value)}>
+              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <span className="text-[#636366] mt-5">—</span>
+          <div>
+            <label className="text-xs text-[#8E8E93] mb-1 block">Cierre</label>
+            <select className={selectClass} value={closingTime} onChange={e => setClosingTime(e.target.value)}>
+              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        <p className="text-xs text-[#636366] mt-2">El horario define la ventana disponible para crear slots.</p>
+      </Card>
+
+      {/* Duración */}
+      <Card>
+        <h3 className="text-xs font-medium text-[#636366] uppercase mb-4">Configuración de partidos</h3>
+        <div className="flex items-start gap-6">
+          <div>
+            <label className="text-xs text-[#8E8E93] mb-1 block">Duración partido</label>
+            <select className={selectClass} value={matchDuration} onChange={e => setMatchDuration(Number(e.target.value))}>
+              {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d} min</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-[#8E8E93] mb-1 block">Duración slot</label>
+            <select className={selectClass} value={slotDuration} onChange={e => setSlotDuration(Number(e.target.value))}>
+              {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d} min</option>)}
+            </select>
+          </div>
+        </div>
+        <p className="text-xs text-[#636366] mt-2">La duración del slot debe ser ≤ duración del partido.</p>
+      </Card>
+
+      <div className="flex justify-end gap-3">
+        <Button variant="secondary" onClick={() => { setName(court.name); setAddress(court.address); }}>Cancelar</Button>
+        <Button onClick={handleSave} disabled={saving}>{saving ? 'Guardando...' : 'Guardar cambios'}</Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Tab: Slots ──────────────────────────────────────────────
+
+const STATUS_COLORS: Record<CourtSlot['status'], string> = {
+  available: 'bg-[#7BFF00]/20 text-[#7BFF00] border-[#7BFF00]/30',
+  reserved: 'bg-[#0A84FF]/20 text-[#0A84FF] border-[#0A84FF]/30',
+  blocked: 'bg-[#FF453A]/20 text-[#FF453A] border-[#FF453A]/30',
+};
+const STATUS_LABEL: Record<CourtSlot['status'], string> = { available: 'Disponible', reserved: 'Reservado', blocked: 'Bloqueado' };
+
+function SlotsTab({ court }: { court: Court }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [slots, setSlots] = useState<CourtSlot[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newStart, setNewStart] = useState('09:00');
+  const [newEnd, setNewEnd] = useState('09:30');
+  const [newStatus, setNewStatus] = useState<'available' | 'blocked'>('available');
+
+  const loadSlots = () => getCourtSlots(court.id, selectedDate).then(setSlots);
+  useEffect(() => { loadSlots(); }, [court.id, selectedDate]);
+
+  const addDays = (base: string, n: number) => {
+    const d = new Date(base); d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const handleCreate = async () => {
+    if (newStart >= newEnd) return toast.error('La hora fin debe ser posterior a la hora inicio');
+    await createCourtSlot({ courtId: court.id, date: selectedDate, startTime: newStart, endTime: newEnd, status: newStatus });
+    setShowCreate(false);
+    toast.success('Slot creado');
+    loadSlots();
+  };
+
+  const handleToggleStatus = async (slot: CourtSlot) => {
+    const next: CourtSlot['status'] = slot.status === 'available' ? 'blocked' : slot.status === 'blocked' ? 'available' : slot.status;
+    if (next === slot.status) return;
+    await updateCourtSlot(slot.id, { status: next });
+    loadSlots();
+  };
+
+  const selectClass = 'bg-[#2C2C2E] text-white text-sm rounded-xl px-3 py-2 border border-[#2C2C2E] outline-none focus:border-[#7BFF00]';
+
+  return (
+    <div className="space-y-4">
+      {/* Date nav */}
+      <div className="flex items-center gap-3">
+        <button onClick={() => setSelectedDate(d => addDays(d, -1))} className="text-[#8E8E93] hover:text-white px-2 py-1">←</button>
+        <span className="text-white text-sm font-medium">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+        <button onClick={() => setSelectedDate(d => addDays(d, 1))} className="text-[#8E8E93] hover:text-white px-2 py-1">→</button>
+        <div className="ml-auto">
+          <Button size="sm" onClick={() => setShowCreate(true)}>+ Crear slot</Button>
+        </div>
+      </div>
+
+      {slots.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Clock size={40} className="text-[#3C3C3E] mb-3" />
+          <p className="text-white font-medium">Sin slots para este día</p>
+          <p className="text-sm text-[#8E8E93] mt-1">Crea slots manualmente o genera automáticamente desde la configuración de horario.</p>
+        </div>
+      ) : (
+        <Card className="!p-0 overflow-hidden">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-[#2C2C2E]">
+                {['Inicio', 'Fin', 'Estado', 'Acciones'].map(col => (
+                  <th key={col} className="px-4 py-3 text-xs font-medium text-[#636366] uppercase">{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {slots.sort((a, b) => a.startTime.localeCompare(b.startTime)).map(slot => (
+                <tr key={slot.id} className="border-b border-[#2C2C2E] last:border-0 hover:bg-[#2C2C2E]/30">
+                  <td className="px-4 py-3 text-sm text-white">{slot.startTime}</td>
+                  <td className="px-4 py-3 text-sm text-white">{slot.endTime}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex px-2 py-0.5 rounded-lg text-xs border ${STATUS_COLORS[slot.status]}`}>
+                      {STATUS_LABEL[slot.status]}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {slot.status !== 'reserved' && (
+                      <button
+                        onClick={() => handleToggleStatus(slot)}
+                        className="text-xs text-[#8E8E93] hover:text-white transition-colors"
+                      >
+                        {slot.status === 'available' ? 'Bloquear' : 'Liberar'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {/* Leyenda */}
+      <div className="flex items-center gap-4 text-xs text-[#8E8E93]">
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#7BFF00]" />Disponible</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0A84FF]" />Reservado</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#FF453A]" />Bloqueado</span>
+      </div>
+
+      {/* Modal crear slot */}
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Crear slot"
+        footer={<><Button variant="secondary" onClick={() => setShowCreate(false)}>Cancelar</Button><Button onClick={handleCreate}>Crear slot</Button></>}
+      >
+        <div className="space-y-4">
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="text-xs text-[#8E8E93] mb-1 block">Hora inicio</label>
+              <select className={selectClass + ' w-full'} value={newStart} onChange={e => setNewStart(e.target.value)}>
+                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="text-xs text-[#8E8E93] mb-1 block">Hora fin</label>
+              <select className={selectClass + ' w-full'} value={newEnd} onChange={e => setNewEnd(e.target.value)}>
+                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-[#8E8E93] mb-1 block">Estado</label>
+            <select className={selectClass + ' w-full'} value={newStatus} onChange={e => setNewStatus(e.target.value as 'available' | 'blocked')}>
+              <option value="available">Disponible</option>
+              <option value="blocked">Bloqueado</option>
+            </select>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ── Tab: Incidencias ────────────────────────────────────────
+
+function IncidenciasTab({ court }: { court: Court }) {
+  const [tickets, setTickets] = useState<MaintenanceTicketWithHoop[]>([]);
+
+  useEffect(() => {
+    getMaintenanceTickets(court.gymId).then(({ tickets: t }) => {
+      setTickets(t.filter(tk => tk.courtId === court.id));
+    });
+  }, [court.id, court.gymId]);
+
+  if (tickets.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <AlertCircle size={40} className="text-[#3C3C3E] mb-3" />
+        <p className="text-white font-medium">Sin incidencias</p>
+        <p className="text-sm text-[#8E8E93] mt-1">Esta canasta no tiene incidencias registradas.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {tickets.map(ticket => (
+        <Card key={ticket.id}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant={PRIORITY_VARIANTS[ticket.priority]}>{PRIORITY_LABELS[ticket.priority]}</Badge>
+                <Badge variant={STATUS_VARIANTS[ticket.status]}>{STATUS_LABELS[ticket.status]}</Badge>
+              </div>
+              <p className="text-sm font-medium text-white">{ticket.title}</p>
+              <p className="text-xs text-[#8E8E93]">{ticket.description}</p>
+              <p className="text-xs text-[#636366]">Creado {new Date(ticket.createdAt).toLocaleDateString('es')}</p>
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// ── Main Page ───────────────────────────────────────────────
 
 export default function CourtDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { currentGym } = useGym();
   const [court, setCourt] = useState<Court | null>(null);
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [dailyData, setDailyData] = useState<DailyMatches[]>([]);
+  const [activeTab, setActiveTab] = useState<'config' | 'slots' | 'incidencias'>('config');
 
   useEffect(() => {
-    getCourts().then((courts) => {
-      const found = courts.find((c) => c.id === id);
+    getCourts().then(courts => {
+      const found = courts.find(c => c.id === id);
       if (found) setCourt(found);
     });
-    getMatches({ courtId: id }).then(setMatches);
-    getDailyMatchesData(30).then(setDailyData);
   }, [id]);
 
   if (!court) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-[#8E8E93]">Cargando...</p>
-      </div>
-    );
+    return <div className="flex items-center justify-center h-64"><p className="text-[#8E8E93]">Cargando...</p></div>;
   }
-
-  const courtMatches = matches.filter((m) => m.courtId === id);
-  const totalMatches = courtMatches.length;
-  const avgDuration = totalMatches > 0
-    ? Math.round(courtMatches.reduce((a, m) => a + m.duration, 0) / totalMatches)
-    : 0;
-  const formatCounts = courtMatches.reduce((acc, m) => {
-    acc[m.format] = (acc[m.format] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  const topFormat = Object.entries(formatCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '-';
 
   return (
     <div className="space-y-6">
@@ -61,86 +356,38 @@ export default function CourtDetailPage() {
         className="flex items-center gap-2 text-[#8E8E93] hover:text-white transition-colors"
       >
         <ArrowLeft size={18} />
-        <span className="text-sm">Volver a canchas</span>
+        <span className="text-sm">Volver a cestas</span>
       </button>
 
+      {/* Header */}
       <div className="flex items-center gap-4">
         <div className="w-12 h-12 rounded-2xl bg-[#7BFF00]/10 flex items-center justify-center">
-          <MapPin size={24} className="text-[#7BFF00]" />
+          <Dribbble size={24} className="text-[#7BFF00]" />
         </div>
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-white">{court.name}</h1>
             <CourtStatusBadge status={court.status} />
+            {!court.is_active && <Badge variant="gray">Inactiva</Badge>}
           </div>
-          <p className="text-sm text-[#8E8E93]">
-            {court.location} · Instalada {formatDate(court.installedDate)}
-          </p>
+          <p className="text-sm text-[#8E8E93]">{court.address || court.location}</p>
         </div>
       </div>
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total partidos', value: totalMatches },
-          { label: 'Duracion media', value: `${avgDuration} min` },
-          { label: 'Formato popular', value: topFormat },
-          { label: 'Estado', value: court.status === 'online' ? 'Activa' : court.status === 'maintenance' ? 'Mant.' : 'Inactiva' },
-        ].map((stat) => (
-          <Card key={stat.label}>
-            <p className="text-xs text-[#636366] mb-1">{stat.label}</p>
-            <p className="text-xl font-bold text-white">{stat.value}</p>
-          </Card>
-        ))}
-      </div>
+      {/* Tabs */}
+      <Tabs
+        tabs={[
+          { id: 'config', label: 'Configuración' },
+          { id: 'slots', label: 'Slots' },
+          { id: 'incidencias', label: 'Incidencias' },
+        ]}
+        active={activeTab}
+        onChange={(id) => setActiveTab(id as 'config' | 'slots' | 'incidencias')}
+      />
 
-      {/* Chart */}
-      <Card>
-        <h3 className="text-base font-semibold text-white mb-1">Actividad diaria</h3>
-        <p className="text-xs text-[#8E8E93] mb-4">Partidos en esta canasta, ultimos 30 dias</p>
-        <div className="h-[280px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={dailyData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="courtGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={chartColors[0]} stopOpacity={0.3} />
-                  <stop offset="95%" stopColor={chartColors[0]} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2C2C2E" vertical={false} />
-              <XAxis
-                dataKey="date"
-                stroke="#636366"
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => {
-                  const d = new Date(v);
-                  return `${d.getDate()}/${d.getMonth() + 1}`;
-                }}
-                interval="preserveStartEnd"
-              />
-              <YAxis stroke="#636366" fontSize={11} tickLine={false} axisLine={false} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#1C1C1E',
-                  border: '1px solid #2C2C2E',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  fontSize: '13px',
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="matches"
-                stroke={chartColors[0]}
-                strokeWidth={2}
-                fill="url(#courtGradient)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
+      {activeTab === 'config' && <ConfigTab court={court} onSaved={setCourt} />}
+      {activeTab === 'slots' && <SlotsTab court={court} />}
+      {activeTab === 'incidencias' && <IncidenciasTab court={court} />}
     </div>
   );
 }

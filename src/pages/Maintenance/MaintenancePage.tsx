@@ -5,10 +5,10 @@ import { Button } from '../../components/ui/Button';
 import { useGym } from '../../contexts/GymContext';
 import { getMaintenanceTickets, getMaintenanceStats, getCourts, getUsers } from '../../data/api';
 import { usePermissions } from '../../hooks/usePermissions';
-import type { MaintenanceTicket, TicketStatus } from '../../types/maintenance';
+import type { TicketStatus, MaintenanceLog } from '../../types/maintenance';
+import type { MaintenanceTicketWithHoop } from '../../types/maintenance-hoop';
 import type { Court } from '../../types/court';
 import type { AppUser } from '../../types/auth';
-import type { MaintenanceLog } from '../../types/maintenance';
 import TicketCard from './TicketCard';
 import CreateTicketModal from './CreateTicketModal';
 import TicketDetailModal from './TicketDetailModal';
@@ -23,7 +23,7 @@ interface MaintenanceStats {
 export default function MaintenancePage() {
   const { currentGym } = useGym();
   const { canManageMaintenance } = usePermissions();
-  const [tickets, setTickets] = useState<MaintenanceTicket[]>([]);
+  const [tickets, setTickets] = useState<MaintenanceTicketWithHoop[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [stats, setStats] = useState<MaintenanceStats | null>(null);
@@ -36,7 +36,7 @@ export default function MaintenancePage() {
 
   // Modals
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedTicket, setSelectedTicket] = useState<MaintenanceTicket | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<MaintenanceTicketWithHoop | null>(null);
 
   const gymId = currentGym?.id;
 
@@ -60,7 +60,7 @@ export default function MaintenancePage() {
     .filter((t) => courtFilter === 'all' || t.courtId === courtFilter)
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
-  const handleCreated = (ticket: MaintenanceTicket) => {
+  const handleCreated = (ticket: MaintenanceTicketWithHoop) => {
     setTickets((prev) => [ticket, ...prev]);
   };
 
@@ -97,15 +97,15 @@ export default function MaintenancePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-white">MANTENIMIENTO</h1>
+          <h1 className="text-2xl font-display font-bold text-white">INCIDENCIAS</h1>
           <p className="text-[#8E8E93] text-sm mt-1 font-['Poppins'] normal-case not-italic font-normal">
-            Gestion de tickets y estado de equipamiento
+            Gestion de incidencias de las cestas del club
           </p>
         </div>
         {canManageMaintenance && (
           <Button onClick={() => setShowCreate(true)}>
             <Plus size={16} />
-            Nuevo ticket
+            Nueva incidencia
           </Button>
         )}
       </div>
@@ -142,7 +142,7 @@ export default function MaintenancePage() {
           <option value="critical">Critica</option>
         </select>
         <select value={courtFilter} onChange={(e) => setCourtFilter(e.target.value)} className={selectClass}>
-          <option value="all">Todas las canchas</option>
+          <option value="all">Todas las cestas</option>
           {courts.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
@@ -164,7 +164,7 @@ export default function MaintenancePage() {
 
       {filtered.length === 0 && (
         <div className="text-center py-12 text-[#636366]">
-          No hay tickets que coincidan con los filtros seleccionados
+          No hay incidencias que coincidan con los filtros seleccionados
         </div>
       )}
 

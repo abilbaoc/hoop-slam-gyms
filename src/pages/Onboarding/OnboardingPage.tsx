@@ -72,6 +72,8 @@ export default function OnboardingPage() {
       id: newCourtId, gymId: newGymId, name: data.court.name || 'Canasta 1',
       location: data.court.location || 'Pista principal', status: 'online',
       installedDate: new Date().toISOString().split('T')[0], sensorStatus: 'ok',
+      is_active: true, address: data.court.location || '', opening_time: '09:00',
+      closing_time: '21:00', is_visible: true, match_duration_minutes: 20, slot_duration_minutes: 30,
     });
 
     schedules.push({

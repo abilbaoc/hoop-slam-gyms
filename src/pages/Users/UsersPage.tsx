@@ -58,7 +58,7 @@ export default function UsersPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs tabs={roleTabs} activeTab={roleFilter} onChange={setRoleFilter} />
+      <Tabs tabs={roleTabs} active={roleFilter} onChange={setRoleFilter} />
 
       {/* User list */}
       <Card className="overflow-x-auto !p-0">

@@ -2,17 +2,11 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   MapPin,
-  Map,
-  Swords,
-  Users,
-  FileText,
-  Settings,
   ChevronLeft,
   ChevronRight,
   Calendar,
   Building2,
   UserCog,
-  Bell,
   ArrowLeft,
   Wrench,
 } from 'lucide-react';
@@ -23,24 +17,18 @@ import { usePermissions } from '../hooks/usePermissions';
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { gym, gymId } = useGymLayout();
-  const { canManageUsers, canViewAnalytics, canManagePricing, canManageMaintenance } = usePermissions();
+  const { canManageUsers, canManageMaintenance } = usePermissions();
   const navigate = useNavigate();
 
   const prefix = `/gym/${gymId}`;
 
   const navItems = [
     { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Dashboard', show: true },
-    { to: `${prefix}/courts`, icon: MapPin, label: 'Canchas', show: true },
-    { to: `${prefix}/map`, icon: Map, label: 'Mapa', show: true },
-    { to: `${prefix}/matches`, icon: Swords, label: 'Partidos', show: canViewAnalytics },
-    { to: `${prefix}/players`, icon: Users, label: 'Jugadores', show: canViewAnalytics },
+    { to: `${prefix}/courts`, icon: MapPin, label: 'Cestas', show: true },
     { to: `${prefix}/reservations`, icon: Calendar, label: 'Reservas', show: true },
-    { to: `${prefix}/reports`, icon: FileText, label: 'Reportes', show: canViewAnalytics },
-    { to: `${prefix}/settings`, icon: Settings, label: 'Configuracion', show: canManagePricing },
-    { to: `${prefix}/profile`, icon: Building2, label: 'Perfil Gym', show: true },
-    { to: `${prefix}/users`, icon: UserCog, label: 'Usuarios', show: canManageUsers },
-    { to: `${prefix}/maintenance`, icon: Wrench, label: 'Mantenimiento', show: canManageMaintenance },
-    { to: `${prefix}/notifications`, icon: Bell, label: 'Notificaciones', show: true },
+    { to: `${prefix}/users`, icon: UserCog, label: 'Miembros', show: canManageUsers },
+    { to: `${prefix}/maintenance`, icon: Wrench, label: 'Incidencias', show: canManageMaintenance },
+    { to: `${prefix}/profile`, icon: Building2, label: 'Perfil Club', show: true },
   ];
 
   return (
