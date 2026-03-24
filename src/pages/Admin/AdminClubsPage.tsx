@@ -5,6 +5,8 @@ import { Modal } from '../../components/ui/Modal';
 import { getGyms, updateGym, createGym } from '../../data/api';
 import type { Gym } from '../../types/gym';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
+import { Navigate } from 'react-router-dom';
 
 function ClubModal({ gym, onClose, onSaved }: { gym?: Gym; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(gym?.name ?? '');
@@ -64,10 +66,14 @@ function ClubModal({ gym, onClose, onSaved }: { gym?: Gym; onClose: () => void; 
 }
 
 export default function AdminClubsPage() {
+  const { currentUser } = useAuth();
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [editGym, setEditGym] = useState<Gym | undefined>();
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+
+  // Server-side guard is in App.tsx (AdminGuard); this is a defence-in-depth check
+  if (currentUser?.role !== 'admin') return <Navigate to="/" replace />;
 
   const load = () => getGyms().then(setGyms);
   useEffect(() => { load(); }, []);

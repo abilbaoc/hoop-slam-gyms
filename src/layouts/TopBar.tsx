@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Bell, LogOut } from 'lucide-react';
+import { Bell, LogOut, Sun, Moon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useGymLayout } from './GymLayout';
 import { ROLE_LABELS } from '../types/auth';
 import { getUnreadNotificationCount } from '../data/api';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function TopBar() {
   const { currentUser, signOut } = useAuth();
   const { gym, gymId } = useGymLayout();
   const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
+  const { theme, toggle } = useTheme();
 
   useEffect(() => {
     getUnreadNotificationCount(gymId).then(setUnreadCount);
@@ -23,6 +25,15 @@ export default function TopBar() {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* Theme toggle */}
+        <button
+          onClick={toggle}
+          className="p-2 rounded-xl text-[#8E8E93] hover:text-white hover:bg-[#1C1C1E] transition-colors"
+          title={theme === 'dark' ? 'Modo día' : 'Modo noche'}
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+
         {/* Notification bell */}
         <button
           onClick={() => navigate(`/gym/${gymId}/notifications`)}

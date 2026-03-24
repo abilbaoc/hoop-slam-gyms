@@ -39,6 +39,54 @@
   --spacing-sidebar-collapsed: 72px;
 }
 
+/* ── Light theme ─────────────────────────────────────────────────────────── */
+html.light {
+  color-scheme: light;
+}
+
+/* Background overrides */
+html.light body,
+html.light .bg-black            { background-color: #F2F2F7 !important; }
+html.light .bg-\[\#0A0A0F\]    { background-color: #F5F5FA !important; }
+html.light .bg-\[\#1C1C1E\]    { background-color: #FFFFFF !important; }
+html.light .bg-\[\#2C2C2E\]    { background-color: #E5E5EA !important; }
+html.light .bg-\[\#3C3C3E\]    { background-color: #D1D1D6 !important; }
+html.light .bg-\[\#1C1C1E\]\/60 { background-color: rgba(242,242,247,0.6) !important; }
+html.light .bg-\[\#2C2C2E\]\/30 { background-color: rgba(229,229,234,0.3) !important; }
+html.light .bg-\[\#2C2C2E\]\/50 { background-color: rgba(229,229,234,0.5) !important; }
+html.light .bg-black\/80        { background-color: rgba(250,250,252,0.9) !important; }
+
+/* Border overrides */
+html.light .border-\[\#2C2C2E\] { border-color: #D1D1D6 !important; }
+html.light .border-\[\#3C3C3E\] { border-color: #C7C7CC !important; }
+
+/* Text overrides */
+html.light .text-white          { color: #1C1C1E !important; }
+html.light .text-\[\#8E8E93\]  { color: #48484A !important; }
+html.light .text-\[\#636366\]  { color: #8E8E93 !important; }
+html.light .text-\[\#3C3C3E\]  { color: #8E8E93 !important; }
+
+/* Preserve accent & status colors */
+html.light .text-\[\#7BFF00\]  { color: #5ABF00 !important; }
+html.light .bg-\[\#7BFF00\]    { background-color: #7BFF00 !important; }
+html.light .text-\[\#FF453A\]  { color: #FF453A !important; }
+html.light .text-\[\#34C759\]  { color: #34C759 !important; }
+html.light .text-\[\#FF9F0A\]  { color: #FF9F0A !important; }
+html.light .text-\[\#0A84FF\]  { color: #0A84FF !important; }
+
+/* Inputs */
+html.light input,
+html.light select,
+html.light textarea             { color: #1C1C1E; }
+
+/* Scrollbar */
+html.light * {
+  scrollbar-color: #C7C7CC #F2F2F7;
+}
+html.light ::-webkit-scrollbar-track { background: #F2F2F7; }
+html.light ::-webkit-scrollbar-thumb { background: #C7C7CC; }
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
 * {
   scrollbar-width: thin;
   scrollbar-color: #2C2C2E #000000;
@@ -62,7 +110,6 @@ h1, h2, h3 {
   text-transform: uppercase;
 }
 
-/* Utility class for display font (KPI values, brand text, etc.) */
 .font-display {
   font-family: "Barlow Condensed", "Poppins", system-ui, sans-serif !important;
   font-weight: 800 !important;
@@ -71,7 +118,6 @@ h1, h2, h3 {
   text-transform: uppercase;
 }
 
-/* Non-italic variant */
 .font-display-upright {
   font-family: "Barlow Condensed", "Poppins", system-ui, sans-serif !important;
   font-weight: 700 !important;

@@ -19,6 +19,7 @@ import AdminGestoresPage from './pages/Admin/AdminGestoresPage';
 import CookieBanner from './components/ui/CookieBanner';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 function RootRedirect() {
   const { isAuthenticated } = useAuth();
@@ -26,6 +27,14 @@ function RootRedirect() {
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
   return <GymListPage />;
+}
+
+/** Guard: solo usuarios con role === 'admin' pueden acceder a rutas /admin/* */
+function AdminGuard({ children }: { children: React.ReactNode }) {
+  const { currentUser, isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (currentUser?.role !== 'admin') return <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
 function AppRoutes() {
@@ -36,7 +45,7 @@ function AppRoutes() {
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route path="/" element={<RootRedirect />} />
-      <Route path="/admin" element={<GymLayout />}>
+      <Route path="/admin" element={<AdminGuard><GymLayout /></AdminGuard>}>
         <Route path="clubs" element={<AdminClubsPage />} />
         <Route path="gestores" element={<AdminGestoresPage />} />
         <Route index element={<Navigate to="clubs" replace />} />
@@ -59,6 +68,7 @@ function AppRoutes() {
 
 export default function App() {
   return (
+    <ThemeProvider>
     <AuthProvider>
       <BrowserRouter>
         <Toaster
@@ -75,5 +85,6 @@ export default function App() {
         <CookieBanner />
       </BrowserRouter>
     </AuthProvider>
+    </ThemeProvider>
   );
 }

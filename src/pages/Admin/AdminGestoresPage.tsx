@@ -7,6 +7,8 @@ import { getUsers, getGyms } from '../../data/api';
 import type { AppUser } from '../../types/auth';
 import type { Gym } from '../../types/gym';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
+import { Navigate } from 'react-router-dom';
 
 function GestorModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('');
@@ -89,10 +91,14 @@ const ROLE_BADGE: Record<string, { variant: 'green' | 'blue' | 'gray'; label: st
 };
 
 export default function AdminGestoresPage() {
+  const { currentUser } = useAuth();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+
+  // Server-side guard is in App.tsx (AdminGuard); this is a defence-in-depth check
+  if (currentUser?.role !== 'admin') return <Navigate to="/" replace />;
 
   useEffect(() => {
     getUsers().then(setUsers);
