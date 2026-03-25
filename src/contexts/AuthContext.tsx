@@ -212,8 +212,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Sign In ──
+  // Only whitelisted emails can access the dashboard
+  const ALLOWED_EMAILS = ['laieta@hoopslam.net', 'alejandro.bilbao@hoopslam.net'];
+
   const signIn = useCallback(async (email: string, password: string): Promise<{ error?: string }> => {
     if (!supabase) return { error: 'Supabase no configurado' };
+
+    if (!ALLOWED_EMAILS.includes(email.toLowerCase().trim())) {
+      return { error: 'Acceso no autorizado' };
+    }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
