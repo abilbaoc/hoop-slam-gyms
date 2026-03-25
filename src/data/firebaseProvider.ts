@@ -65,17 +65,9 @@ function guessFormat(playerCount: number): MatchFormat {
 
 export async function fbGetGyms(): Promise<Gym[]> {
   await ensureFirebaseAuth();
-  // Collect all court IDs to attach to the virtual gym
+  // Collect court IDs from the courts collection only
   const snap = await getDocs(collection(getDb(), 'courts'));
   const courtIds = snap.docs.map(d => d.id);
-
-  // Also collect court IDs embedded in reservations (some courts only appear there)
-  const reSnap = await getDocs(collection(getDb(), 'reservations'));
-  const seen = new Set(courtIds);
-  reSnap.docs.forEach(d => {
-    const cId = d.data().courtId;
-    if (cId && !seen.has(cId)) { seen.add(cId); courtIds.push(cId); }
-  });
 
   return [{
     id: LAIETA_GYM_ID,
@@ -126,34 +118,6 @@ export async function fbGetCourts(_gymId?: string): Promise<Court[]> {
       match_duration_minutes: data.config?.gameMaxDuration ? Math.round(data.config.gameMaxDuration / 60) : 20,
       slot_duration_minutes: data.config?.reservationSlotDuration ? Math.round(data.config.reservationSlotDuration / 60) : 30,
     });
-  });
-
-  // 2. Courts only found embedded in reservations
-  const reSnap = await getDocs(collection(getDb(), 'reservations'));
-  reSnap.docs.forEach(d => {
-    const data = d.data();
-    const cId = data.courtId;
-    const embedded = data.court;
-    if (cId && !courtsMap.has(cId) && embedded) {
-      courtsMap.set(cId, {
-        id: cId,
-        gymId: LAIETA_GYM_ID,
-        name: embedded.name ?? '',
-        location: embedded.locationName ?? embedded.address ?? '',
-        status: mapCourtStatus(embedded.state, embedded.online),
-        installedDate: '',
-        firmwareVersion: undefined,
-        lastHeartbeat: undefined,
-        sensorStatus: 'ok',
-        is_active: embedded.state === 'active' || embedded.state === 'online',
-        address: embedded.address ?? '',
-        opening_time: embedded.openingTime ?? '09:00',
-        closing_time: embedded.closingTime ?? '21:00',
-        is_visible: true,
-        match_duration_minutes: embedded.config?.gameMaxDuration ? Math.round(embedded.config.gameMaxDuration / 60) : 20,
-        slot_duration_minutes: embedded.config?.reservationSlotDuration ? Math.round(embedded.config.reservationSlotDuration / 60) : 30,
-      });
-    }
   });
 
   return [...courtsMap.values()];
