@@ -5,7 +5,6 @@ import OverviewPage from './pages/Overview/OverviewPage';
 import CourtsPage from './pages/Courts/CourtsPage';
 import CourtDetailPage from './pages/Courts/CourtDetailPage';
 import LoginPage from './pages/Auth/LoginPage';
-import SignupPage from './pages/Auth/SignupPage';
 import AuthCallbackPage from './pages/Auth/AuthCallbackPage';
 import PendingPage from './pages/Auth/PendingPage';
 import GymProfilePage from './pages/GymProfile/GymProfilePage';
