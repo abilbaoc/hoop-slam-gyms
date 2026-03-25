@@ -1,38 +1,55 @@
 import { useEffect, useState } from 'react';
-import { Plus, UserCog, MoreHorizontal, Pencil, KeyRound, Trash2 } from 'lucide-react';
+import { Plus, UserCog, MoreHorizontal, Pencil, KeyRound, Trash2, Mail, Shield, UserCircle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import Badge from '../../components/ui/Badge';
-import { getUsers, getGyms } from '../../data/api';
+import { getUsers, getGyms, updateUserRole } from '../../data/api';
 import type { AppUser } from '../../types/auth';
 import type { Gym } from '../../types/gym';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
 
-function GestorModal({ onClose }: { onClose: () => void }) {
+function GestorModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [gymId, setGymId] = useState('');
   const [gyms, setGyms] = useState<Gym[]>([]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => { getGyms().then(setGyms); }, []);
-
-  const genPassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#';
-    setPassword(Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join(''));
-  };
 
   const inputClass = 'w-full bg-[#2C2C2E] text-white text-sm rounded-xl px-4 py-2.5 border border-[#2C2C2E] outline-none focus:border-[#7BFF00] placeholder-[#636366]';
   const selectClass = 'w-full bg-[#2C2C2E] text-white text-sm rounded-xl px-4 py-2.5 border border-[#2C2C2E] outline-none focus:border-[#7BFF00]';
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name.trim()) return toast.error('El nombre es obligatorio');
     if (!email.trim()) return toast.error('El email es obligatorio');
-    if (!password || password.length < 8) return toast.error('La contraseña debe tener al menos 8 caracteres');
-    toast.success(`Gestor creado. Se ha enviado un email de bienvenida a ${email}.`);
-    onClose();
+    setSaving(true);
+    try {
+      const { data: { session } } = await supabase!.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-gestor`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ name, email, gymId: gymId || null, role: 'gestor' }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido');
+      toast.success(`Invitación enviada a ${email}. El gestor recibirá un email para activar su cuenta.`);
+      onCreated();
+      onClose();
+    } catch (err: unknown) {
+      toast.error((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -43,11 +60,18 @@ function GestorModal({ onClose }: { onClose: () => void }) {
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleCreate}>Crear gestor</Button>
+          <Button onClick={handleCreate} disabled={saving}>
+            {saving ? 'Enviando...' : <><Mail size={14} /> Enviar invitación</>}
+          </Button>
         </>
       }
     >
       <div className="space-y-4">
+        <div className="flex items-start gap-3 p-3 rounded-xl bg-[#0A84FF]/8 border-l-2 border-[#0A84FF]">
+          <p className="text-xs text-[#8E8E93]">
+            El gestor recibirá un email de invitación para crear su contraseña y acceder al dashboard.
+          </p>
+        </div>
         <div>
           <label className="text-xs text-[#8E8E93] mb-1 block">Nombre completo *</label>
           <input className={inputClass} value={name} onChange={e => setName(e.target.value)} placeholder="Ej: Joan García" />
@@ -55,22 +79,6 @@ function GestorModal({ onClose }: { onClose: () => void }) {
         <div>
           <label className="text-xs text-[#8E8E93] mb-1 block">Email *</label>
           <input type="email" className={inputClass} value={email} onChange={e => setEmail(e.target.value)} placeholder="gestor@club.com" />
-        </div>
-        <div>
-          <label className="text-xs text-[#8E8E93] mb-1 block">Contraseña temporal *</label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              className={inputClass}
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Min. 8 caracteres"
-            />
-            <Button variant="secondary" size="sm" onClick={genPassword}>
-              <KeyRound size={14} /> Generar
-            </Button>
-          </div>
-          <p className="text-xs text-[#636366] mt-1">El gestor deberá cambiarla al primer inicio de sesión.</p>
         </div>
         <div>
           <label className="text-xs text-[#8E8E93] mb-1 block">Asignar a club (opcional)</label>
@@ -100,10 +108,12 @@ export default function AdminGestoresPage() {
   // Server-side guard is in App.tsx (AdminGuard); this is a defence-in-depth check
   if (currentUser?.role !== 'admin') return <Navigate to="/" replace />;
 
-  useEffect(() => {
+  const load = () => {
     getUsers().then(setUsers);
     getGyms().then(setGyms);
-  }, []);
+  };
+
+  useEffect(() => { load(); }, []);
 
   const gymNameForUser = (user: AppUser) => {
     if (!user.gymIds?.length) return '—';
@@ -171,6 +181,48 @@ export default function AdminGestoresPage() {
                           >
                             <KeyRound size={14} /> Resetear contraseña
                           </button>
+                          <div className="border-t border-[#3C3C3E] mx-2 my-1" />
+                          <p className="px-4 py-1 text-[10px] text-[#636366] uppercase">Cambiar rol</p>
+                          {user.role !== 'admin' && (
+                            <button
+                              onClick={async () => {
+                                await updateUserRole(user.id, 'admin');
+                                toast.success(`${user.name} promovido a Admin`);
+                                setMenuOpen(null);
+                                load();
+                              }}
+                              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-white hover:bg-[#3C3C3E]"
+                            >
+                              <Shield size={14} /> Promover a Admin
+                            </button>
+                          )}
+                          {user.role !== 'gestor' && (
+                            <button
+                              onClick={async () => {
+                                await updateUserRole(user.id, 'gestor');
+                                toast.success(`${user.name} ahora es Responsable`);
+                                setMenuOpen(null);
+                                load();
+                              }}
+                              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-white hover:bg-[#3C3C3E]"
+                            >
+                              <UserCog size={14} /> Hacer Responsable
+                            </button>
+                          )}
+                          {user.role !== 'staff' && (
+                            <button
+                              onClick={async () => {
+                                await updateUserRole(user.id, 'staff');
+                                toast.success(`${user.name} ahora es Staff`);
+                                setMenuOpen(null);
+                                load();
+                              }}
+                              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-white hover:bg-[#3C3C3E]"
+                            >
+                              <UserCircle size={14} /> Hacer Staff
+                            </button>
+                          )}
+                          <div className="border-t border-[#3C3C3E] mx-2 my-1" />
                           <button
                             onClick={() => { toast.error('Eliminar gestor no implementado en demo'); setMenuOpen(null); }}
                             className="flex items-center gap-2 w-full px-4 py-2 text-sm text-[#FF453A] hover:bg-[#3C3C3E]"
@@ -188,7 +240,7 @@ export default function AdminGestoresPage() {
         </div>
       )}
 
-      {showCreate && <GestorModal onClose={() => setShowCreate(false)} />}
+      {showCreate && <GestorModal onClose={() => setShowCreate(false)} onCreated={load} />}
     </div>
   );
 }

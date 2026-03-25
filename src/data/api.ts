@@ -19,6 +19,8 @@ import type {
 } from '../types';
 import type { Gym } from '../types/gym';
 import type { AppUser } from '../types/auth';
+import type { UserRole } from '../types/auth';
+import { ROLE_PERMISSIONS } from '../types/auth';
 import type { AppNotification } from '../types/notification';
 
 import { courts } from './mock/courts';
@@ -46,6 +48,8 @@ import type { StatsOverview, DailyStats } from '../types/stats';
 import { courtSlots as courtSlotsData } from './mock/court_slots';
 import { clubMembers as clubMembersData } from './mock/club_members';
 import { isFirebaseConfigured } from '../lib/firebase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import type { GymOpeningHours } from '../types/gym';
 import {
   fbGetGyms, fbGetGymById, fbGetCourts,
   fbGetMatches, fbGetReservations,
@@ -67,8 +71,33 @@ function getGymCourtIds(gymId?: string): Set<string> | null {
 
 // ── Gyms ──
 
+function mapSupabaseGym(row: Record<string, unknown>): Gym {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    slug: (row.slug as string) ?? '',
+    address: (row.address as string) ?? '',
+    city: (row.city as string) ?? '',
+    timezone: (row.timezone as string) ?? 'Europe/Madrid',
+    phone: (row.phone as string) ?? '',
+    email: (row.email as string) ?? '',
+    openingHours: (row.opening_hours as GymOpeningHours) ?? {
+      weekdayOpen: '09:00', weekdayClose: '21:00',
+      weekendOpen: '10:00', weekendClose: '20:00',
+    },
+    courts: [],
+    createdAt: (row.created_at as string) ?? new Date().toISOString(),
+  };
+}
+
 export async function getGyms(): Promise<Gym[]> {
-  if (USE_FIREBASE) return fbGetGyms();
+  if (USE_FIREBASE) {
+    try { return await fbGetGyms(); } catch (e) { console.error('[Firebase] getGyms:', e); }
+  }
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase.from('gyms').select('*').order('created_at');
+    if (!error && data) return data.map(mapSupabaseGym);
+  }
   await delay();
   return gyms;
 }
@@ -76,7 +105,9 @@ export async function getGyms(): Promise<Gym[]> {
 // ── Courts ──
 
 export async function getCourts(gymId?: string): Promise<Court[]> {
-  if (USE_FIREBASE) return fbGetCourts(gymId);
+  if (USE_FIREBASE) {
+    try { return await fbGetCourts(gymId); } catch (e) { console.error('[Firebase] getCourts:', e); }
+  }
   await delay();
   const ids = getGymCourtIds(gymId);
   return ids ? courts.filter((c) => ids.has(c.id)) : courts;
@@ -118,7 +149,9 @@ export async function getMatches(filters?: {
   days?: number;
   gymId?: string;
 }): Promise<Match[]> {
-  if (USE_FIREBASE) return fbGetMatches(filters);
+  if (USE_FIREBASE) {
+    try { return await fbGetMatches(filters); } catch (e) { console.error('[Firebase] getMatches:', e); }
+  }
   await delay();
   let result = matches;
   const ids = getGymCourtIds(filters?.gymId);
@@ -300,7 +333,9 @@ export async function getReservations(filters?: {
   status?: ReservationStatus;
   gymId?: string;
 }): Promise<Reservation[]> {
-  if (USE_FIREBASE) return fbGetReservations(filters);
+  if (USE_FIREBASE) {
+    try { return await fbGetReservations(filters); } catch (e) { console.error('[Firebase] getReservations:', e); }
+  }
   await delay();
   let result = reservations;
   const ids = getGymCourtIds(filters?.gymId);
@@ -365,23 +400,52 @@ export async function getAuditEntries(gymId?: string): Promise<AuditEntry[]> {
 // ── Users ──
 
 export async function getUsers(gymId?: string): Promise<AppUser[]> {
+  if (isSupabaseConfigured && supabase) {
+    let query = supabase.from('profiles').select('*');
+    if (gymId) query = query.filter('gym_ids', 'cs', `{${gymId}}`);
+    const { data, error } = await query;
+    if (!error && data) return data.map((p: Record<string, unknown>) => ({
+      id: p.id as string,
+      name: (p.name as string) || '',
+      email: (p.email as string) || '',
+      role: (p.role as UserRole) || 'staff',
+      gymIds: (p.gym_ids as string[]) || [],
+      permissions: ROLE_PERMISSIONS[(p.role as UserRole) || 'staff'],
+      lastActiveAt: new Date().toISOString(),
+      avatarInitials: ((p.name as string) || '?').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2),
+    }));
+  }
   await delay();
   if (!gymId) return users;
   return users.filter(u => u.gymIds.includes(gymId));
 }
 
 export async function getGymById(id: string): Promise<Gym | undefined> {
-  if (USE_FIREBASE) return fbGetGymById(id);
+  if (USE_FIREBASE) {
+    try { return await fbGetGymById(id); } catch (e) { console.error('[Firebase] getGymById:', e); }
+  }
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase.from('gyms').select('*').eq('id', id).single();
+    if (!error && data) return mapSupabaseGym(data as Record<string, unknown>);
+    return undefined;
+  }
   await delay();
   return gyms.find(g => g.id === id);
 }
 
 export async function updateGym(id: string, data: Partial<Gym>): Promise<Gym> {
+  if (isSupabaseConfigured && supabase) {
+    const { data: updated, error } = await supabase
+      .from('gyms')
+      .update({ name: data.name, city: data.city, address: data.address })
+      .eq('id', id).select().single();
+    if (error) throw new Error(error.message);
+    return mapSupabaseGym(updated as Record<string, unknown>);
+  }
   await delay();
   const idx = gyms.findIndex(g => g.id === id);
   if (idx === -1) throw new Error('Gym not found');
   gyms[idx] = { ...gyms[idx], ...data };
-  addAuditEntry({ action: 'update', entity: 'court', entityId: id, description: `Actualizo datos del gimnasio "${gyms[idx].name}"` });
   return gyms[idx];
 }
 
@@ -448,8 +512,10 @@ export async function getMaintenanceStats(gymId: string): Promise<{
 
 export async function getStatsOverview(gymId: string): Promise<StatsOverview> {
   if (USE_FIREBASE) {
-    const courtIds = (await fbGetCourts(gymId)).map(c => c.id);
-    return fbGetStatsOverview(gymId, courtIds);
+    try {
+      const courtIds = (await fbGetCourts(gymId)).map(c => c.id);
+      return await fbGetStatsOverview(gymId, courtIds);
+    } catch (e) { console.error('[Firebase] getStatsOverview:', e); }
   }
   await delay();
   const ids = getGymCourtIds(gymId);
@@ -470,8 +536,10 @@ export async function getStatsOverview(gymId: string): Promise<StatsOverview> {
 
 export async function getDailyStats(gymId: string, days: number): Promise<DailyStats[]> {
   if (USE_FIREBASE) {
-    const courtIds = (await fbGetCourts(gymId)).map(c => c.id);
-    return fbGetDailyStats(gymId, courtIds, days);
+    try {
+      const courtIds = (await fbGetCourts(gymId)).map(c => c.id);
+      return await fbGetDailyStats(gymId, courtIds, days);
+    } catch (e) { console.error('[Firebase] getDailyStats:', e); }
   }
   await delay();
   const ids = getGymCourtIds(gymId);
@@ -524,6 +592,15 @@ export async function deleteCourtSlot(id: string): Promise<void> {
 }
 
 export async function createGym(data: { name: string; city: string; address?: string }): Promise<Gym> {
+  if (isSupabaseConfigured && supabase) {
+    const slug = data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const { data: created, error } = await supabase
+      .from('gyms')
+      .insert({ name: data.name, city: data.city, address: data.address ?? '', slug, timezone: 'Europe/Madrid' })
+      .select().single();
+    if (error) throw new Error(error.message);
+    return mapSupabaseGym(created as Record<string, unknown>);
+  }
   await delay();
   const newGym: Gym = {
     id: `gym-${String(gyms.length + 1).padStart(3, '0')}`,
@@ -539,15 +616,40 @@ export async function createGym(data: { name: string; city: string; address?: st
     createdAt: new Date().toISOString(),
   };
   gyms.push(newGym);
-  addAuditEntry({ action: 'create', entity: 'court', entityId: newGym.id, description: `Creo club "${newGym.name}"` });
   return newGym;
 }
 
 // ── Club Members ──
 
 export async function getClubMembers(gymId: string): Promise<ClubMember[]> {
-  if (USE_FIREBASE) return fbGetClubMembers(gymId);
+  if (USE_FIREBASE) {
+    try { return await fbGetClubMembers(gymId); } catch (e) { console.error('[Firebase] getClubMembers:', e); }
+  }
   await delay();
   return clubMembersData.filter((m) => m.gymId === gymId);
+}
+
+// ── Team (gym-scoped users) ──
+
+export async function getTeamMembers(gymId: string): Promise<AppUser[]> {
+  return getUsers(gymId);
+}
+
+export async function revokeTeamMember(userId: string, gymId: string): Promise<void> {
+  if (isSupabaseConfigured && supabase) {
+    const { data: profile } = await supabase.from('profiles').select('gym_ids').eq('id', userId).single();
+    const newGymIds = (profile?.gym_ids ?? []).filter((id: string) => id !== gymId);
+    await supabase.from('profiles').update({ gym_ids: newGymIds }).eq('id', userId);
+    return;
+  }
+  // mock: no-op
+}
+
+export async function updateUserRole(userId: string, newRole: 'admin' | 'gestor' | 'staff'): Promise<void> {
+  if (isSupabaseConfigured && supabase) {
+    await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
+    return;
+  }
+  // mock: no-op
 }
 

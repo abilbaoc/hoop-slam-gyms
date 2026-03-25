@@ -1,25 +1,21 @@
 /**
- * Firebase Data Provider
+ * Firebase Data Provider — mapped to real Firestore schema (hoopslam-a6c30)
  *
- * Lee datos de Firestore y los mapea a los tipos internos del dashboard.
+ * Collections in Firestore:
+ *   courts (1+)   — basket/court documents
+ *   reservations (92+) — bookings with embedded court & player data
+ *   users (17+)   — player profiles
  *
- * ─── NOMBRES DE COLECCIÓN ──────────────────────────────────────────────────
- * Ajusta estas constantes en cuanto el ingeniero confirme los nombres reales.
- * ───────────────────────────────────────────────────────────────────────────
+ * No "gyms" collection exists yet — we synthesise a single Laietà gym.
+ * No "matches" collection — finished reservations act as played matches.
  */
 
 import {
   collection,
-  doc,
   getDocs,
-  getDoc,
-  query,
-  where,
-  orderBy,
-  limit,
   Timestamp,
 } from 'firebase/firestore';
-import { getDb } from '../lib/firebase';
+import { getDb, ensureFirebaseAuth } from '../lib/firebase';
 import type { Gym } from '../types/gym';
 import type { Court } from '../types';
 import type { Match, MatchFormat } from '../types';
@@ -27,96 +23,143 @@ import type { Reservation, ReservationStatus } from '../types';
 import type { ClubMember } from '../types/club_member';
 import type { StatsOverview, DailyStats } from '../types/stats';
 
-// ── Colecciones — ajustar con los nombres reales de Firebase ──────────────
-const COL = {
-  gyms:         'gyms',           // TODO: confirmar con ingeniero
-  courts:       'courts',         // TODO: confirmar con ingeniero
-  matches:      'matches',        // TODO: confirmar con ingeniero (¿sessions? ¿games?)
-  reservations: 'reservations',   // TODO: confirmar con ingeniero (¿bookings?)
-  clubMembers:  'club_members',   // TODO: confirmar con ingeniero (¿memberships?)
-  players:      'players',        // TODO: confirmar con ingeniero
-} as const;
+// ── Virtual gym — all courts belong to Laietà for now ─────────────────────
+const LAIETA_GYM_ID = 'laieta';
 
-// ── Helpers ───────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 
+/** Convert a Firestore timestamp-like value to ISO string. */
 function toIso(value: unknown): string {
   if (!value) return new Date().toISOString();
   if (value instanceof Timestamp) return value.toDate().toISOString();
+  // Firestore REST/export format: { seconds, nanoseconds }
+  if (typeof value === 'object' && value !== null && 'seconds' in value) {
+    return new Date((value as { seconds: number }).seconds * 1000).toISOString();
+  }
   if (typeof value === 'string') return value;
   return new Date().toISOString();
 }
 
-// ── Gyms ──────────────────────────────────────────────────────────────────
+/** Map Firestore court state to our CourtStatus. */
+function mapCourtStatus(state: string | undefined, online?: boolean): 'online' | 'offline' | 'maintenance' {
+  if (state === 'maintenance') return 'maintenance';
+  if (state === 'active' || state === 'online') return online !== false ? 'online' : 'offline';
+  return 'offline';
+}
+
+/** Map Firestore reservation state to our ReservationStatus. */
+function mapReservationStatus(state: string | undefined): ReservationStatus {
+  if (state === 'finished' || state === 'finished_by_system') return 'confirmed';
+  if (state === 'canceled' || state === 'canceled_by_system') return 'cancelled';
+  return 'confirmed';
+}
+
+/** Guess match format from player count. */
+function guessFormat(playerCount: number): MatchFormat {
+  if (playerCount <= 2) return '1v1';
+  if (playerCount <= 4) return '2v2';
+  return '3v3';
+}
+
+// ── Gyms ───────────────────────────────────────────────────────────────────
 
 export async function fbGetGyms(): Promise<Gym[]> {
-  const snap = await getDocs(collection(getDb(), COL.gyms));
-  return snap.docs.map(d => {
-    const data = d.data();
-    return {
-      id:           d.id,
-      name:         data.name ?? '',
-      slug:         data.slug ?? d.id,
-      address:      data.address ?? '',
-      city:         data.city ?? '',
-      timezone:     data.timezone ?? 'Europe/Madrid',
-      phone:        data.phone ?? '',
-      email:        data.email ?? '',
-      openingHours: data.openingHours ?? { weekdayOpen: '09:00', weekdayClose: '21:00', weekendOpen: '10:00', weekendClose: '20:00' },
-      courts:       data.courts ?? [],
-      createdAt:    toIso(data.createdAt),
-    } satisfies Gym;
+  await ensureFirebaseAuth();
+  // Collect all court IDs to attach to the virtual gym
+  const snap = await getDocs(collection(getDb(), 'courts'));
+  const courtIds = snap.docs.map(d => d.id);
+
+  // Also collect court IDs embedded in reservations (some courts only appear there)
+  const reSnap = await getDocs(collection(getDb(), 'reservations'));
+  const seen = new Set(courtIds);
+  reSnap.docs.forEach(d => {
+    const cId = d.data().courtId;
+    if (cId && !seen.has(cId)) { seen.add(cId); courtIds.push(cId); }
   });
+
+  return [{
+    id: LAIETA_GYM_ID,
+    name: 'Club Esportiu Laietà',
+    slug: 'laieta',
+    address: 'Carrer dels Vergós, 3, 08017 Barcelona',
+    city: 'Barcelona',
+    timezone: 'Europe/Madrid',
+    phone: '',
+    email: '',
+    openingHours: { weekdayOpen: '09:00', weekdayClose: '23:00', weekendOpen: '09:00', weekendClose: '23:00' },
+    courts: courtIds,
+    createdAt: new Date().toISOString(),
+  }];
 }
 
 export async function fbGetGymById(id: string): Promise<Gym | undefined> {
-  const snap = await getDoc(doc(getDb(), COL.gyms, id));
-  if (!snap.exists()) return undefined;
-  const data = snap.data();
-  return {
-    id:           snap.id,
-    name:         data.name ?? '',
-    slug:         data.slug ?? snap.id,
-    address:      data.address ?? '',
-    city:         data.city ?? '',
-    timezone:     data.timezone ?? 'Europe/Madrid',
-    phone:        data.phone ?? '',
-    email:        data.email ?? '',
-    openingHours: data.openingHours ?? { weekdayOpen: '09:00', weekdayClose: '21:00', weekendOpen: '10:00', weekendClose: '20:00' },
-    courts:       data.courts ?? [],
-    createdAt:    toIso(data.createdAt),
-  };
+  const gyms = await fbGetGyms();
+  return gyms.find(g => g.id === id);
 }
 
-// ── Courts ────────────────────────────────────────────────────────────────
+// ── Courts ─────────────────────────────────────────────────────────────────
 
-export async function fbGetCourts(gymId?: string): Promise<Court[]> {
-  const ref = collection(getDb(), COL.courts);
-  const q = gymId ? query(ref, where('gymId', '==', gymId)) : ref;
-  const snap = await getDocs(q);
-  return snap.docs.map(d => {
+export async function fbGetCourts(_gymId?: string): Promise<Court[]> {
+  await ensureFirebaseAuth();
+
+  // 1. Courts from the courts collection
+  const snap = await getDocs(collection(getDb(), 'courts'));
+  const courtsMap = new Map<string, Court>();
+
+  snap.docs.forEach(d => {
     const data = d.data();
-    return {
-      id:                    d.id,
-      gymId:                 data.gymId ?? '',
-      name:                  data.name ?? '',
-      location:              data.location ?? '',
-      status:                data.status ?? 'offline',
-      installedDate:         data.installedDate ?? '',
-      firmwareVersion:       data.firmwareVersion ?? '',
-      lastHeartbeat:         toIso(data.lastHeartbeat),
-      sensorStatus:          data.sensorStatus ?? 'ok',
-      is_active:             data.is_active ?? true,
-      address:               data.address ?? '',
-      opening_time:          data.opening_time ?? '09:00',
-      closing_time:          data.closing_time ?? '21:00',
-      is_visible:            data.is_visible ?? true,
-      match_duration_minutes: data.match_duration_minutes ?? 20,
-      slot_duration_minutes:  data.slot_duration_minutes ?? 30,
-    } satisfies Court;
+    courtsMap.set(d.id, {
+      id: d.id,
+      gymId: LAIETA_GYM_ID,
+      name: data.name ?? '',
+      location: data.locationName ?? data.address ?? '',
+      status: mapCourtStatus(data.state, data.online),
+      installedDate: '',
+      firmwareVersion: undefined,
+      lastHeartbeat: undefined,
+      sensorStatus: 'ok',
+      is_active: data.state === 'active' || data.state === 'online',
+      address: data.address ?? '',
+      opening_time: data.openingTime ?? '09:00',
+      closing_time: data.closingTime ?? '21:00',
+      is_visible: true,
+      match_duration_minutes: data.config?.gameMaxDuration ? Math.round(data.config.gameMaxDuration / 60) : 20,
+      slot_duration_minutes: data.config?.reservationSlotDuration ? Math.round(data.config.reservationSlotDuration / 60) : 30,
+    });
   });
+
+  // 2. Courts only found embedded in reservations
+  const reSnap = await getDocs(collection(getDb(), 'reservations'));
+  reSnap.docs.forEach(d => {
+    const data = d.data();
+    const cId = data.courtId;
+    const embedded = data.court;
+    if (cId && !courtsMap.has(cId) && embedded) {
+      courtsMap.set(cId, {
+        id: cId,
+        gymId: LAIETA_GYM_ID,
+        name: embedded.name ?? '',
+        location: embedded.locationName ?? embedded.address ?? '',
+        status: mapCourtStatus(embedded.state, embedded.online),
+        installedDate: '',
+        firmwareVersion: undefined,
+        lastHeartbeat: undefined,
+        sensorStatus: 'ok',
+        is_active: embedded.state === 'active' || embedded.state === 'online',
+        address: embedded.address ?? '',
+        opening_time: embedded.openingTime ?? '09:00',
+        closing_time: embedded.closingTime ?? '21:00',
+        is_visible: true,
+        match_duration_minutes: embedded.config?.gameMaxDuration ? Math.round(embedded.config.gameMaxDuration / 60) : 20,
+        slot_duration_minutes: embedded.config?.reservationSlotDuration ? Math.round(embedded.config.reservationSlotDuration / 60) : 30,
+      });
+    }
+  });
+
+  return [...courtsMap.values()];
 }
 
-// ── Matches ───────────────────────────────────────────────────────────────
+// ── Matches (derived from finished reservations) ──────────────────────────
 
 export async function fbGetMatches(filters?: {
   courtId?: string;
@@ -124,40 +167,48 @@ export async function fbGetMatches(filters?: {
   days?: number;
   gymId?: string;
 }): Promise<Match[]> {
-  const ref = collection(getDb(), COL.matches);
-  const constraints = [];
+  await ensureFirebaseAuth();
+  const snap = await getDocs(collection(getDb(), 'reservations'));
 
-  if (filters?.courtId) constraints.push(where('courtId', '==', filters.courtId));
-  if (filters?.format)  constraints.push(where('format', '==', filters.format));
-  if (filters?.days) {
-    const cutoff = Timestamp.fromDate(new Date(Date.now() - filters.days * 86400000));
-    constraints.push(where('startedAt', '>=', cutoff));
-  }
-  constraints.push(orderBy('startedAt', 'desc'), limit(500));
+  let results: Match[] = [];
 
-  const snap = await getDocs(query(ref, ...constraints));
-  let result: Match[] = snap.docs.map(d => {
+  snap.docs.forEach(d => {
     const data = d.data();
-    return {
-      id:          d.id,
-      courtId:     data.courtId ?? '',
-      format:      data.format ?? '1v1',
-      scoreA:      data.scoreA ?? 0,
-      scoreB:      data.scoreB ?? 0,
-      duration:    data.duration ?? 20,
-      startedAt:   toIso(data.startedAt),
-      endedAt:     toIso(data.endedAt),
-      playerCount: data.playerCount ?? 2,
-    } satisfies Match;
+    const state = data.state as string;
+    // Only finished reservations count as played matches
+    if (state !== 'finished' && state !== 'finished_by_system') return;
+
+    const startDate = toIso(data.startDate);
+    const endDate = toIso(data.endDate);
+    const playerCount = (data.playerIds as string[] | undefined)?.length ?? 1;
+    const format = guessFormat(playerCount);
+    const durationMin = Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 60000);
+
+    results.push({
+      id: d.id,
+      courtId: data.courtId ?? '',
+      format,
+      scoreA: 0, // no score data in Firestore
+      scoreB: 0,
+      duration: durationMin > 0 ? durationMin : 20,
+      startedAt: startDate,
+      endedAt: endDate,
+      playerCount,
+    });
   });
 
-  // Filtro por gymId en cliente si no hay índice compuesto en Firebase
-  if (filters?.gymId) {
-    // Requiere saber los courtIds del gym — esto se resuelve con un join en cliente
-    // TODO: optimizar con índice compuesto courtId+gymId en Firestore si el volumen es alto
+  // Apply filters
+  if (filters?.courtId) results = results.filter(m => m.courtId === filters.courtId);
+  if (filters?.format) results = results.filter(m => m.format === filters.format);
+  if (filters?.days) {
+    const cutoff = Date.now() - filters.days * 86400000;
+    results = results.filter(m => new Date(m.startedAt).getTime() >= cutoff);
   }
 
-  return result;
+  // Sort newest first
+  results.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+
+  return results;
 }
 
 // ── Reservations ──────────────────────────────────────────────────────────
@@ -168,91 +219,97 @@ export async function fbGetReservations(filters?: {
   status?: ReservationStatus;
   gymId?: string;
 }): Promise<Reservation[]> {
-  const ref = collection(getDb(), COL.reservations);
-  const constraints = [];
+  await ensureFirebaseAuth();
+  const snap = await getDocs(collection(getDb(), 'reservations'));
 
-  if (filters?.courtId) constraints.push(where('courtId', '==', filters.courtId));
-  if (filters?.date)    constraints.push(where('date', '==', filters.date));
-  if (filters?.status)  constraints.push(where('status', '==', filters.status));
-  constraints.push(orderBy('createdAt', 'desc'), limit(500));
-
-  const snap = await getDocs(query(ref, ...constraints));
-  return snap.docs.map(d => {
+  let results: Reservation[] = snap.docs.map(d => {
     const data = d.data();
+    const start = new Date(toIso(data.startDate));
+    const end = new Date(toIso(data.endDate));
+    const playerCount = (data.playerIds as string[] | undefined)?.length ?? 1;
+
+    // Get owner name from embedded team1Players
+    const players = (data.team1Players as Array<{ name?: string }>) ?? [];
+    const ownerName = players[0]?.name ?? data.ownerEmail ?? 'Unknown';
+
     return {
-      id:         d.id,
-      courtId:    data.courtId ?? '',
-      date:       data.date ?? '',
-      startTime:  data.startTime ?? '',
-      endTime:    data.endTime ?? '',
-      playerName: data.playerName ?? data.userName ?? '',
-      format:     data.format ?? '1v1',
-      status:     data.status ?? 'confirmed',
-      createdAt:  toIso(data.createdAt),
-    } satisfies Reservation;
+      id: d.id,
+      courtId: data.courtId ?? '',
+      date: start.toISOString().slice(0, 10),
+      startTime: start.toTimeString().slice(0, 5),
+      endTime: end.toTimeString().slice(0, 5),
+      playerName: ownerName,
+      format: guessFormat(playerCount) as MatchFormat,
+      status: mapReservationStatus(data.state),
+      createdAt: toIso(data.createdAt),
+    };
   });
+
+  // Apply filters
+  if (filters?.courtId) results = results.filter(r => r.courtId === filters.courtId);
+  if (filters?.date) results = results.filter(r => r.date === filters.date);
+  if (filters?.status) results = results.filter(r => r.status === filters.status);
+
+  // Sort newest first
+  results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return results;
 }
 
-// ── Club Members ──────────────────────────────────────────────────────────
+// ── Club Members (from users collection) ──────────────────────────────────
 
-export async function fbGetClubMembers(gymId: string): Promise<ClubMember[]> {
-  const ref = collection(getDb(), COL.clubMembers);
-  const snap = await getDocs(query(ref, where('gymId', '==', gymId)));
-  return snap.docs.map(d => {
-    const data = d.data();
-    return {
-      id:       d.id,
-      gymId:    data.gymId ?? gymId,
-      userId:   data.userId ?? '',
-      nickname: data.nickname ?? data.displayName ?? '',
-      // email omitido — solo nickname visible en dashboard según política de datos
-      joinedAt: toIso(data.joinedAt ?? data.createdAt),
-    } satisfies ClubMember;
-  });
+export async function fbGetClubMembers(_gymId: string): Promise<ClubMember[]> {
+  await ensureFirebaseAuth();
+  const snap = await getDocs(collection(getDb(), 'users'));
+  return snap.docs
+    .filter(d => {
+      const data = d.data();
+      return data.state !== 'deleted' && data.name;
+    })
+    .map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        gymId: LAIETA_GYM_ID,
+        userId: d.id,
+        nickname: data.username ?? data.name ?? '',
+        joinedAt: toIso(data.createdAt),
+      } satisfies ClubMember;
+    });
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────
 
-export async function fbGetStatsOverview(gymId: string, courtIds: string[]): Promise<StatsOverview> {
-  const [reservations, matches] = await Promise.all([
-    fbGetReservations({ gymId }),
-    fbGetMatches({ gymId }),
-  ]);
-
-  // Filtrar por courtIds del gym
-  const gymReservations = reservations.filter(r => courtIds.includes(r.courtId));
-  const gymMatches = matches.filter(m => courtIds.includes(m.courtId));
-  const now = new Date();
+export async function fbGetStatsOverview(_gymId: string, _courtIds: string[]): Promise<StatsOverview> {
+  const reservations = await fbGetReservations({});
+  const matches = await fbGetMatches({});
 
   return {
-    reservas_hechas:     gymReservations.filter(r => r.status === 'confirmed').length,
-    reservas_iniciadas:  gymReservations.filter(r => {
+    reservas_hechas: reservations.filter(r => r.status === 'confirmed').length,
+    reservas_iniciadas: reservations.filter(r => {
       if (r.status !== 'confirmed') return false;
-      return new Date(`${r.date}T${r.startTime}`) <= now;
+      return new Date(`${r.date}T${r.startTime}`) <= new Date();
     }).length,
-    reservas_canceladas: gymReservations.filter(r => r.status === 'cancelled').length,
-    partidos_jugados:    gymMatches.length,
+    reservas_canceladas: reservations.filter(r => r.status === 'cancelled').length,
+    partidos_jugados: matches.length,
     partidos_cancelados: 0,
   };
 }
 
-export async function fbGetDailyStats(gymId: string, courtIds: string[], days: number): Promise<DailyStats[]> {
+export async function fbGetDailyStats(_gymId: string, _courtIds: string[], days: number): Promise<DailyStats[]> {
   const [reservations, matches] = await Promise.all([
-    fbGetReservations({ gymId }),
-    fbGetMatches({ gymId, days }),
+    fbGetReservations({}),
+    fbGetMatches({ days }),
   ]);
 
-  const gymReservations = reservations.filter(r => courtIds.includes(r.courtId));
-  const gymMatches = matches.filter(m => courtIds.includes(m.courtId));
   const result: DailyStats[] = [];
-
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(Date.now() - i * 86400000);
     const dateStr = d.toISOString().slice(0, 10);
     result.push({
-      date:         dateStr,
-      reservations: gymReservations.filter(r => r.date === dateStr).length,
-      matches:      gymMatches.filter(m => m.startedAt.slice(0, 10) === dateStr).length,
+      date: dateStr,
+      reservations: reservations.filter(r => r.date === dateStr).length,
+      matches: matches.filter(m => m.startedAt.slice(0, 10) === dateStr).length,
     });
   }
   return result;

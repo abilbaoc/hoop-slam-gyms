@@ -1,7 +1,7 @@
+import { useState, useEffect, createContext, useContext } from 'react';
 import { Outlet, useParams, Navigate } from 'react-router-dom';
-import { createContext, useContext } from 'react';
 import type { Gym } from '../types/gym';
-import { gyms } from '../data/mock/gyms';
+import { getGymById } from '../data/api';
 import { useAuth } from '../contexts/AuthContext';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
@@ -22,53 +22,50 @@ export function useGymLayout() {
 
 export default function GymLayout() {
   const { gymId } = useParams<{ gymId: string }>();
-  const { canAccessGym, isAuthenticated } = useAuth();
+  const { canAccessGym, isAuthenticated, currentUser, updateUserGymIds } = useAuth();
+  const [gym, setGym] = useState<Gym | null | undefined>(undefined); // undefined=loading, null=not found
+
+  useEffect(() => {
+    if (gymId) {
+      getGymById(gymId).then(g => setGym(g ?? null));
+    }
+  }, [gymId]);
+
+  // Clear stale gymIds when the gym no longer exists in the DB
+  useEffect(() => {
+    if (gym === null && currentUser?.role !== 'admin' && (currentUser?.gymIds?.length ?? 0) > 0) {
+      updateUserGymIds([]);
+    }
+  }, [gym]);
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
-  const gym = gyms.find((g) => g.id === gymId);
-
-  if (!gym) {
+  if (gym === undefined) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <p className="text-2xl font-bold text-white">Gimnasio no encontrado</p>
-          <p className="text-[#8E8E93]">El gimnasio con ID &quot;{gymId}&quot; no existe.</p>
-          <a href="/" className="text-[#7BFF00] underline text-sm">Volver al inicio</a>
-        </div>
+        <div className="w-6 h-6 border-2 border-[#7BFF00] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  if (!canAccessGym(gym.id)) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <p className="text-2xl font-bold text-white">Acceso denegado</p>
-          <p className="text-[#8E8E93]">No tienes permisos para acceder a este gimnasio.</p>
-          <a href="/" className="text-[#7BFF00] underline text-sm">Volver al inicio</a>
-        </div>
-      </div>
-    );
+  if (!gym) {
+    if (currentUser?.role === 'admin') return <Navigate to="/admin/clubs" replace />;
+    if (currentUser?.role === 'staff') return <Navigate to="/pending" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return (
     <GymLayoutContext.Provider value={{ gym, gymId: gym.id }}>
       <div className="min-h-screen bg-black">
-        {/* Desktop sidebar */}
         <div className="hidden lg:block">
           <Sidebar />
         </div>
-
-        {/* Main content */}
         <div className="lg:ml-[260px] transition-all duration-300">
           <TopBar />
           <main className="p-4 sm:p-6 pb-24 lg:pb-6">
             <Outlet />
           </main>
         </div>
-
-        {/* Mobile bottom nav */}
         <MobileNav />
       </div>
     </GymLayoutContext.Provider>

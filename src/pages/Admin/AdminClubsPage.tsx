@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Plus, Building2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Building2, MoreHorizontal, Pencil, Trash2, ExternalLink } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { getGyms, updateGym, createGym } from '../../data/api';
 import type { Gym } from '../../types/gym';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 
 function ClubModal({ gym, onClose, onSaved }: { gym?: Gym; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(gym?.name ?? '');
@@ -67,6 +67,7 @@ function ClubModal({ gym, onClose, onSaved }: { gym?: Gym; onClose: () => void; 
 
 export default function AdminClubsPage() {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [editGym, setEditGym] = useState<Gym | undefined>();
@@ -104,7 +105,7 @@ export default function AdminClubsPage() {
           <table className="w-full text-left">
             <thead className="bg-[#1C1C1E]">
               <tr className="border-b border-[#2C2C2E]">
-                {['Nombre', 'Ciudad', 'Dirección', 'Cestas', 'Acciones'].map(col => (
+                {['Nombre', 'Ciudad', 'Dirección', 'Cestas', '', 'Acciones'].map(col => (
                   <th key={col} className="px-4 py-3 text-xs font-medium text-[#636366] uppercase">{col}</th>
                 ))}
               </tr>
@@ -116,6 +117,14 @@ export default function AdminClubsPage() {
                   <td className="px-4 py-3 text-sm text-[#8E8E93]">{gym.city}</td>
                   <td className="px-4 py-3 text-sm text-[#8E8E93]">{gym.address || '—'}</td>
                   <td className="px-4 py-3 text-sm text-white">{gym.courts.length}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => navigate(`/gym/${gym.id}/dashboard`)}
+                      className="flex items-center gap-1.5 text-xs text-[#7BFF00] hover:underline"
+                    >
+                      <ExternalLink size={12} /> Ver club
+                    </button>
+                  </td>
                   <td className="px-4 py-3 relative">
                     <button
                       onClick={() => setMenuOpen(menuOpen === gym.id ? null : gym.id)}

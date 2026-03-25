@@ -9,6 +9,7 @@ import {
   UserCog,
   ArrowLeft,
   Wrench,
+  Users,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useGymLayout } from './GymLayout';
@@ -28,6 +29,7 @@ export default function Sidebar() {
     { to: `${prefix}/reservations`, icon: Calendar, label: 'Reservas', show: true },
     { to: `${prefix}/users`, icon: UserCog, label: 'Miembros', show: canManageUsers },
     { to: `${prefix}/maintenance`, icon: Wrench, label: 'Incidencias', show: canManageMaintenance },
+    { to: `${prefix}/team`, icon: Users, label: 'Equipo', show: canManageUsers },
     { to: `${prefix}/profile`, icon: Building2, label: 'Perfil Club', show: true },
   ];
 

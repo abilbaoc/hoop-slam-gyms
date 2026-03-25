@@ -9,7 +9,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
-  signUp: (email: string, password: string, name: string) => Promise<{ error?: string; needsOnboarding?: boolean; needsEmailConfirmation?: boolean }>;
+  signUp: (email: string, password: string, name: string, role?: 'gestor' | 'staff') => Promise<{ error?: string; needsOnboarding?: boolean; needsEmailConfirmation?: boolean }>;
   signOut: () => Promise<void>;
   hasPermission: (p: Permission) => boolean;
   canAccessGym: (gymId: string) => boolean;
@@ -51,7 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function fetchProfile(userId: string, email: string): Promise<AppUser | null> {
     if (!supabase) return null;
 
-    // Return cached version if available
     const cached = profileCache.current.get(userId);
 
     try {
@@ -61,14 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('id', userId)
         .single();
 
-      if (error) {
-        console.warn('[Auth] Profile fetch error:', error.message);
-        // Return cached version or create default - don't return null
-        if (cached) return cached;
-        return buildDefaultUser(userId, email);
-      }
-
-      if (profile) {
+      if (!error && profile) {
         const role = (profile.role as UserRole) || 'gestor';
         const user: AppUser = {
           id: userId,
@@ -85,12 +77,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return user;
       }
 
+      // Direct table read failed (likely missing RLS policy) — try SECURITY DEFINER RPCs
+      console.warn('[Auth] Direct profile read failed, trying RPC fallback:', error?.message);
+      const [roleRes, gymIdsRes] = await Promise.all([
+        supabase.rpc('current_user_role'),
+        supabase.rpc('current_user_gym_ids'),
+      ]);
+
+      if (!roleRes.error && roleRes.data) {
+        const role = roleRes.data as UserRole;
+        // Get name from auth metadata or cache
+        const name = cached?.name || email.split('@')[0];
+        const gymIds: string[] = Array.isArray(gymIdsRes.data) ? gymIdsRes.data : [];
+        const user: AppUser = {
+          id: userId,
+          name,
+          email,
+          role,
+          gymIds,
+          permissions: ROLE_PERMISSIONS[role],
+          lastActiveAt: new Date().toISOString(),
+          avatarInitials: getInitials(name),
+        };
+        profileCache.current.set(userId, user);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+        return user;
+      }
+
+      console.warn('[Auth] RPC fallback also failed:', roleRes.error?.message);
       if (cached) return cached;
-      return buildDefaultUser(userId, email);
+      // Nothing worked — sign out to force clean re-login
+      await supabase.auth.signOut();
+      return null;
     } catch (err) {
       console.warn('[Auth] Profile fetch exception:', err);
       if (cached) return cached;
-      return buildDefaultUser(userId, email);
+      await supabase.auth.signOut();
+      return null;
     }
   }
 
@@ -127,7 +150,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session?.user) {
           fetchProfile(session.user.id, session.user.email ?? '').then((user) => {
-            if (user) setCurrentUser(user);
+            if (user) {
+              setCurrentUser(user);
+            } else {
+              // fetchProfile returned null → signed out, clear state
+              setCurrentUser(null);
+              localStorage.removeItem(STORAGE_KEY);
+              profileCache.current.clear();
+            }
             setIsLoading(false);
           });
         } else {
@@ -195,13 +225,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Sign Up ──
-  const signUp = useCallback(async (email: string, password: string, name: string): Promise<{ error?: string; needsOnboarding?: boolean; needsEmailConfirmation?: boolean }> => {
+  const signUp = useCallback(async (email: string, password: string, name: string, role: 'gestor' | 'staff' = 'gestor'): Promise<{ error?: string; needsOnboarding?: boolean; needsEmailConfirmation?: boolean }> => {
     if (!supabase) return { error: 'Supabase no configurado' };
 
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name } },
+      options: { data: { name, role } },
     });
 
     if (error) {
@@ -210,27 +240,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: `Error: ${error.message}` };
     }
 
-    // Create profile explicitly
     if (data.user) {
       try {
         await supabase.from('profiles').upsert({
           id: data.user.id,
           name,
-          role: 'gestor',
+          role,
           gym_ids: [],
         });
       } catch {
         // Trigger will handle it
       }
 
-      // Also set user locally right away so they don't get kicked to login
       const user = buildDefaultUser(data.user.id, email);
       user.name = name;
+      user.role = role;
       user.avatarInitials = getInitials(name);
+      user.permissions = ROLE_PERMISSIONS[role];
       setCurrentUser(user);
     }
 
-    return { needsOnboarding: true, needsEmailConfirmation: !data.session };
+    return { needsOnboarding: role === 'gestor', needsEmailConfirmation: !data.session };
   }, []);
 
   // ── Sign Out ──
@@ -289,7 +319,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (gymId: string): boolean => {
       if (!currentUser) return false;
       if (currentUser.role === 'admin') return true;
-      return currentUser.gymIds?.includes(gymId) ?? false;
+      // If no gymIds assigned, allow access (pre-club-segmentation phase)
+      if (!currentUser.gymIds || currentUser.gymIds.length === 0) return true;
+      return currentUser.gymIds.includes(gymId);
     },
     [currentUser],
   );
