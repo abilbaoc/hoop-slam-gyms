@@ -7,11 +7,10 @@ import Tabs from '../../components/ui/Tabs';
 import CourtStatusBadge from '../../components/shared/CourtStatusBadge';
 import Badge from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
-import { getCourts, updateCourt, getCourtSlots, createCourtSlot, updateCourtSlot, getMaintenanceTickets } from '../../data/api';
+import { getCourts, updateCourt, getCourtSlots, createCourtSlot, updateCourtSlot, getIncidents, createIncident, updateIncident } from '../../data/api';
+import type { FirebaseCourtIncident, IncidentType, IncidentPriority } from '../../data/api';
 import { useGym } from '../../contexts/GymContext';
 import type { Court, CourtSlot } from '../../types';
-import type { MaintenanceTicketWithHoop } from '../../types/maintenance-hoop';
-import { PRIORITY_LABELS, PRIORITY_VARIANTS, STATUS_LABELS, STATUS_VARIANTS } from '../../types/maintenance';
 import { toast } from 'sonner';
 
 // ── Tab: Configuración ──────────────────────────────────────
@@ -351,44 +350,147 @@ function SlotsTab({ court }: { court: Court }) {
   );
 }
 
-// ── Tab: Incidencias ────────────────────────────────────────
+// ── Tab: Incidencias (Firebase court_incidents) ────────────────────────────
+
+const PRIORITY_COLORS: Record<IncidentPriority, string> = {
+  low: 'green', medium: 'blue', high: 'yellow', critical: 'red',
+};
+const PRIORITY_LABEL: Record<IncidentPriority, string> = {
+  low: 'Baja', medium: 'Media', high: 'Alta', critical: 'Critica',
+};
+const INCIDENT_STATUS_LABEL: Record<string, string> = {
+  open: 'Abierta', in_progress: 'En progreso', resolved: 'Resuelta',
+};
+const INCIDENT_STATUS_COLOR: Record<string, string> = {
+  open: 'red', in_progress: 'yellow', resolved: 'green',
+};
+const TYPE_LABEL: Record<IncidentType, string> = {
+  hardware: 'Hardware', software: 'Software', user_report: 'Reporte usuario', maintenance: 'Mantenimiento',
+};
 
 function IncidenciasTab({ court }: { court: Court }) {
-  const [tickets, setTickets] = useState<MaintenanceTicketWithHoop[]>([]);
+  const [incidents, setIncidents] = useState<FirebaseCourtIncident[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newType, setNewType] = useState<IncidentType>('maintenance');
+  const [newPriority, setNewPriority] = useState<IncidentPriority>('medium');
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    getMaintenanceTickets(court.gymId).then(({ tickets: t }) => {
-      setTickets(t.filter(tk => tk.courtId === court.id));
-    });
-  }, [court.id, court.gymId]);
+  const load = () => {
+    setLoading(true);
+    getIncidents(court.id).then(data => { setIncidents(data); setLoading(false); });
+  };
+  useEffect(() => { load(); }, [court.id]);
 
-  if (tickets.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <AlertCircle size={40} className="text-[#3C3C3E] mb-3" />
-        <p className="text-white font-medium">Sin incidencias</p>
-        <p className="text-sm text-[#8E8E93] mt-1">Esta canasta no tiene incidencias registradas.</p>
-      </div>
-    );
-  }
+  const handleCreate = async () => {
+    if (!newTitle.trim()) return toast.error('El titulo es obligatorio');
+    setSaving(true);
+    try {
+      await createIncident({ courtId: court.id, type: newType, title: newTitle, description: newDesc, priority: newPriority });
+      toast.success('Incidencia creada');
+      setShowCreate(false);
+      setNewTitle(''); setNewDesc('');
+      load();
+    } catch (e) {
+      toast.error('Error al crear incidencia');
+    } finally { setSaving(false); }
+  };
+
+  const handleStatusChange = async (id: string, status: 'in_progress' | 'resolved') => {
+    try {
+      await updateIncident(id, { status });
+      toast.success(status === 'resolved' ? 'Incidencia resuelta' : 'Incidencia en progreso');
+      load();
+    } catch { toast.error('Error al actualizar'); }
+  };
+
+  const selectClass = 'bg-[#2C2C2E] text-white text-sm rounded-xl px-3 py-2 border border-[#2C2C2E] outline-none focus:border-[#7BFF00] w-full';
+  const inputClass = selectClass;
+
+  if (loading) return <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-[#7BFF00] border-t-transparent rounded-full animate-spin" /></div>;
 
   return (
-    <div className="space-y-3">
-      {tickets.map(ticket => (
-        <Card key={ticket.id}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant={PRIORITY_VARIANTS[ticket.priority]}>{PRIORITY_LABELS[ticket.priority]}</Badge>
-                <Badge variant={STATUS_VARIANTS[ticket.status]}>{STATUS_LABELS[ticket.status]}</Badge>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-[#636366]">{incidents.length} incidencia{incidents.length !== 1 ? 's' : ''}</span>
+        <Button size="sm" onClick={() => setShowCreate(true)}>+ Nueva incidencia</Button>
+      </div>
+
+      {incidents.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <AlertCircle size={40} className="text-[#3C3C3E] mb-3" />
+          <p className="text-white font-medium">Sin incidencias</p>
+          <p className="text-sm text-[#8E8E93] mt-1">Esta canasta no tiene incidencias registradas.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {incidents.map(inc => (
+            <Card key={inc.id}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1.5 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant={PRIORITY_COLORS[inc.priority] as 'green' | 'blue' | 'yellow' | 'red'}>{PRIORITY_LABEL[inc.priority]}</Badge>
+                    <Badge variant={INCIDENT_STATUS_COLOR[inc.status] as 'green' | 'yellow' | 'red'}>{INCIDENT_STATUS_LABEL[inc.status]}</Badge>
+                    <span className="text-[10px] text-[#636366]">{TYPE_LABEL[inc.type]}</span>
+                  </div>
+                  <p className="text-sm font-medium text-white">{inc.title}</p>
+                  {inc.description && <p className="text-xs text-[#8E8E93]">{inc.description}</p>}
+                  <p className="text-xs text-[#636366]">
+                    {new Date(inc.createdAt).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {inc.reportedBy && ` · ${inc.reportedBy}`}
+                  </p>
+                </div>
+                {inc.status !== 'resolved' && (
+                  <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    {inc.status === 'open' && (
+                      <button onClick={() => handleStatusChange(inc.id, 'in_progress')} className="text-xs text-[#FF9F0A] hover:text-white transition-colors whitespace-nowrap">En progreso</button>
+                    )}
+                    <button onClick={() => handleStatusChange(inc.id, 'resolved')} className="text-xs text-[#34C759] hover:text-white transition-colors whitespace-nowrap">Resolver</button>
+                  </div>
+                )}
               </div>
-              <p className="text-sm font-medium text-white">{ticket.title}</p>
-              <p className="text-xs text-[#8E8E93]">{ticket.description}</p>
-              <p className="text-xs text-[#636366]">Creado {new Date(ticket.createdAt).toLocaleDateString('es')}</p>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Modal crear incidencia */}
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Nueva incidencia"
+        footer={<><Button variant="secondary" onClick={() => setShowCreate(false)}>Cancelar</Button><Button onClick={handleCreate} disabled={saving}>{saving ? 'Creando...' : 'Crear'}</Button></>}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs text-[#8E8E93] mb-1 block">Titulo *</label>
+            <input className={inputClass} value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Describe el problema" />
+          </div>
+          <div>
+            <label className="text-xs text-[#8E8E93] mb-1 block">Descripcion</label>
+            <textarea className={inputClass + ' min-h-[80px]'} value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Detalles adicionales..." />
+          </div>
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="text-xs text-[#8E8E93] mb-1 block">Tipo</label>
+              <select className={selectClass} value={newType} onChange={e => setNewType(e.target.value as IncidentType)}>
+                <option value="hardware">Hardware</option>
+                <option value="software">Software</option>
+                <option value="user_report">Reporte usuario</option>
+                <option value="maintenance">Mantenimiento</option>
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="text-xs text-[#8E8E93] mb-1 block">Prioridad</label>
+              <select className={selectClass} value={newPriority} onChange={e => setNewPriority(e.target.value as IncidentPriority)}>
+                <option value="low">Baja</option>
+                <option value="medium">Media</option>
+                <option value="high">Alta</option>
+                <option value="critical">Critica</option>
+              </select>
             </div>
           </div>
-        </Card>
-      ))}
+        </div>
+      </Modal>
     </div>
   );
 }
