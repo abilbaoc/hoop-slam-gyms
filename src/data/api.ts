@@ -59,7 +59,7 @@ import {
   fbGetCourtIncidents, fbCreateCourtIncident, fbUpdateCourtIncident,
 } from './firebaseProvider';
 import type {
-  FirebaseCourtBlock, FirebaseCourtIncident,
+  FirebaseCourtIncident,
   IncidentType, IncidentPriority, IncidentStatus,
 } from './firebaseProvider';
 

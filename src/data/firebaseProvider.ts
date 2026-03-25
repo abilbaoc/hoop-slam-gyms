@@ -21,7 +21,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   Timestamp,
   serverTimestamp,
 } from 'firebase/firestore';
@@ -408,10 +407,10 @@ export async function fbGetCourtBlocks(courtId: string, date: string): Promise<F
     collection(getDb(), 'court_blocks'),
     where('courtId', '==', courtId),
     where('date', '==', date),
-    orderBy('startTime'),
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => {
+  // Sort client-side to avoid needing a composite index
+  const results = snap.docs.map(d => {
     const data = d.data();
     return {
       id: d.id,
@@ -424,6 +423,7 @@ export async function fbGetCourtBlocks(courtId: string, date: string): Promise<F
       createdAt: toIso(data.createdAt),
     };
   });
+  return results.sort((a, b) => a.startTime.localeCompare(b.startTime));
 }
 
 export async function fbCreateCourtBlock(data: {
@@ -477,11 +477,12 @@ export interface FirebaseCourtIncident {
 export async function fbGetCourtIncidents(courtId?: string): Promise<FirebaseCourtIncident[]> {
   await ensureFirebaseAuth();
   const ref = collection(getDb(), 'court_incidents');
+  // Avoid composite index requirement — sort client-side
   const q = courtId
-    ? query(ref, where('courtId', '==', courtId), orderBy('createdAt', 'desc'))
-    : query(ref, orderBy('createdAt', 'desc'));
+    ? query(ref, where('courtId', '==', courtId))
+    : ref;
   const snap = await getDocs(q);
-  return snap.docs.map(d => {
+  const results = snap.docs.map(d => {
     const data = d.data();
     return {
       id: d.id,
@@ -499,6 +500,7 @@ export async function fbGetCourtIncidents(courtId?: string): Promise<FirebaseCou
       resolvedAt: data.resolvedAt ? toIso(data.resolvedAt) : undefined,
     };
   });
+  return results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function fbCreateCourtIncident(data: {
