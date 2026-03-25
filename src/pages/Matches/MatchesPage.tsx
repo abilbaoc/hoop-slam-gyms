@@ -4,7 +4,7 @@ import { useGymLayout } from '../../layouts/GymLayout';
 import { getMatches } from '../../data/api';
 import type { Match, MatchFormat } from '../../types';
 import Card from '../../components/ui/Card';
-import { Badge } from '../../components/ui/Badge';
+import Badge from '../../components/ui/Badge';
 
 const FORMAT_LABEL: Record<MatchFormat, string> = { '1v1': '1 vs 1', '2v2': '2 vs 2', '3v3': '3 vs 3' };
 const FORMAT_COLOR: Record<MatchFormat, 'green' | 'blue' | 'yellow'> = { '1v1': 'green', '2v2': 'blue', '3v3': 'yellow' };

@@ -17,7 +17,7 @@ import { usePermissions } from '../hooks/usePermissions';
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { gym, gymId } = useGymLayout();
-  const { canManageUsers, canManageMaintenance } = usePermissions();
+  const { canManageUsers } = usePermissions();
   const navigate = useNavigate();
 
   const prefix = `/gym/${gymId}`;
