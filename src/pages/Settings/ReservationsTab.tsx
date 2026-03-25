@@ -15,13 +15,14 @@ export default function ReservationsTab() {
   const { currentGym } = useGym();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
-  const [viewMode, setViewMode] = useState<ViewMode>('calendar');
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
 
   // Filters
+  const today = new Date().toISOString().slice(0, 10);
   const [filterCourtId, setFilterCourtId] = useState('');
-  const [filterDate, setFilterDate] = useState('2026-03-19');
+  const [filterDate, setFilterDate] = useState('');
   const [filterStatus, setFilterStatus] = useState<ReservationStatus | ''>('');
 
   useEffect(() => {
@@ -29,22 +30,20 @@ export default function ReservationsTab() {
     getCourts(currentGym?.id).then(setCourts);
   }, [currentGym?.id]);
 
+  const myCourtIds = useMemo(() => new Set(courts.map(c => c.id)), [courts]);
+
   const filtered = useMemo(() => {
-    let result = reservations;
+    // Only show reservations for this club's courts
+    let result = reservations.filter((r) => myCourtIds.has(r.courtId));
     if (filterCourtId) result = result.filter((r) => r.courtId === filterCourtId);
     if (filterDate) result = result.filter((r) => r.date === filterDate);
     if (filterStatus) result = result.filter((r) => r.status === filterStatus);
     return result;
-  }, [reservations, filterCourtId, filterDate, filterStatus]);
+  }, [reservations, filterCourtId, filterDate, filterStatus, myCourtIds]);
 
-  // Stats for today
-  const todayReservations = useMemo(
-    () => reservations.filter((r) => r.date === '2026-03-19'),
-    [reservations]
-  );
-  const confirmedCount = todayReservations.filter((r) => r.status === 'confirmed').length;
-  const blockedCount = todayReservations.filter((r) => r.status === 'blocked').length;
-  const cancelledCount = todayReservations.filter((r) => r.status === 'cancelled').length;
+  // Stats
+  const confirmedCount = filtered.filter((r) => r.status === 'confirmed').length;
+  const cancelledCount = filtered.filter((r) => r.status === 'cancelled').length;
 
   const handleBlockSave = (data: Omit<Reservation, 'id' | 'createdAt'>) => {
     const newRes: Reservation = {
@@ -72,16 +71,16 @@ export default function ReservationsTab() {
       {/* Stats row */}
       <div className="flex gap-4">
         <Card className="flex-1">
-          <p className="text-xs text-[#636366]">Reservas hoy</p>
+          <p className="text-xs text-[#636366]">Completadas</p>
           <p className="text-xl font-bold text-[#7BFF00]">{confirmedCount}</p>
         </Card>
         <Card className="flex-1">
-          <p className="text-xs text-[#636366]">Bloqueados</p>
-          <p className="text-xl font-bold text-[#FF9F0A]">{blockedCount}</p>
+          <p className="text-xs text-[#636366]">Canceladas</p>
+          <p className="text-xl font-bold text-[#FF453A]">{cancelledCount}</p>
         </Card>
         <Card className="flex-1">
-          <p className="text-xs text-[#636366]">Cancelaciones</p>
-          <p className="text-xl font-bold text-[#FF453A]">{cancelledCount}</p>
+          <p className="text-xs text-[#636366]">Total filtradas</p>
+          <p className="text-xl font-bold text-white">{filtered.length}</p>
         </Card>
       </div>
 
@@ -158,7 +157,7 @@ export default function ReservationsTab() {
         <ReservationCalendar
           reservations={filtered}
           courts={courts}
-          selectedDate={filterDate || '2026-03-19'}
+          selectedDate={filterDate || today}
           onDateChange={setFilterDate}
         />
       ) : (
