@@ -151,22 +151,29 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
 }
 
 // ── Tab: Slots ──────────────────────────────────────────────
+// Lógica: El gimnasio BLOQUEA franjas horarias donde los usuarios NO pueden reservar.
+// Las franjas sin bloqueo quedan libres para reservas individuales desde la app.
+// "Crear slot" = bloquear una franja para uso exclusivo del gimnasio.
 
 const STATUS_COLORS: Record<CourtSlot['status'], string> = {
   available: 'bg-[#7BFF00]/20 text-[#7BFF00] border-[#7BFF00]/30',
   reserved: 'bg-[#0A84FF]/20 text-[#0A84FF] border-[#0A84FF]/30',
-  blocked: 'bg-[#FF453A]/20 text-[#FF453A] border-[#FF453A]/30',
+  blocked: 'bg-[#FF9F0A]/20 text-[#FF9F0A] border-[#FF9F0A]/30',
 };
-const STATUS_LABEL: Record<CourtSlot['status'], string> = { available: 'Disponible', reserved: 'Reservado', blocked: 'Bloqueado' };
+const STATUS_LABEL: Record<CourtSlot['status'], string> = { available: 'Libre', reserved: 'Reservado por usuario', blocked: 'Bloqueado por el club' };
+
+const SLOT_TIMES: string[] = [];
+for (let h = 0; h < 24; h++) for (let m = 0; m < 60; m += 30) {
+  SLOT_TIMES.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+}
 
 function SlotsTab({ court }: { court: Court }) {
   const today = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(today);
   const [slots, setSlots] = useState<CourtSlot[]>([]);
   const [showCreate, setShowCreate] = useState(false);
-  const [newStart, setNewStart] = useState('09:00');
-  const [newEnd, setNewEnd] = useState('09:30');
-  const [newStatus, setNewStatus] = useState<'available' | 'blocked'>('available');
+  const [newStart, setNewStart] = useState(court.opening_time || '09:00');
+  const [newEnd, setNewEnd] = useState('10:00');
 
   const loadSlots = () => getCourtSlots(court.id, selectedDate).then(setSlots);
   useEffect(() => { loadSlots(); }, [court.id, selectedDate]);
@@ -178,20 +185,25 @@ function SlotsTab({ court }: { court: Court }) {
 
   const handleCreate = async () => {
     if (newStart >= newEnd) return toast.error('La hora fin debe ser posterior a la hora inicio');
-    await createCourtSlot({ courtId: court.id, date: selectedDate, startTime: newStart, endTime: newEnd, status: newStatus });
+    // Check overlap with existing blocked slots
+    const overlap = slots.find(s => s.status === 'blocked' && newStart < s.endTime && newEnd > s.startTime);
+    if (overlap) return toast.error(`Se solapa con un bloqueo existente (${overlap.startTime} - ${overlap.endTime})`);
+    await createCourtSlot({ courtId: court.id, date: selectedDate, startTime: newStart, endTime: newEnd, status: 'blocked' });
     setShowCreate(false);
-    toast.success('Slot creado');
+    toast.success('Franja bloqueada — los usuarios no podrán reservar en este horario');
     loadSlots();
   };
 
-  const handleToggleStatus = async (slot: CourtSlot) => {
-    const next: CourtSlot['status'] = slot.status === 'available' ? 'blocked' : slot.status === 'blocked' ? 'available' : slot.status;
-    if (next === slot.status) return;
-    await updateCourtSlot(slot.id, { status: next });
+  const handleUnblock = async (slot: CourtSlot) => {
+    await updateCourtSlot(slot.id, { status: 'available' });
+    toast.success('Franja liberada — los usuarios pueden reservar de nuevo');
     loadSlots();
   };
 
   const selectClass = 'bg-[#2C2C2E] text-white text-sm rounded-xl px-3 py-2 border border-[#2C2C2E] outline-none focus:border-[#7BFF00]';
+
+  const blockedSlots = slots.filter(s => s.status === 'blocked').sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const reservedSlots = slots.filter(s => s.status === 'reserved').sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   return (
     <div className="space-y-4">
@@ -201,85 +213,124 @@ function SlotsTab({ court }: { court: Court }) {
         <span className="text-white text-sm font-medium">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
         <button onClick={() => setSelectedDate(d => addDays(d, 1))} className="text-[#8E8E93] hover:text-white px-2 py-1">→</button>
         <div className="ml-auto">
-          <Button size="sm" onClick={() => setShowCreate(true)}>+ Crear slot</Button>
+          <Button size="sm" onClick={() => setShowCreate(true)}>+ Bloquear franja</Button>
         </div>
       </div>
 
-      {slots.length === 0 ? (
+      {/* Info */}
+      <div className="bg-[#1C1C1E] border border-[#2C2C2E] rounded-xl px-4 py-3">
+        <p className="text-xs text-[#8E8E93]">
+          Horario de la canasta: <span className="text-white font-medium">{court.opening_time} – {court.closing_time}</span>.
+          Las franjas bloqueadas impiden que los usuarios reserven desde la app.
+        </p>
+      </div>
+
+      {/* Blocked slots */}
+      {blockedSlots.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium text-[#636366] uppercase">Franjas bloqueadas por el club</h3>
+          <Card className="!p-0 overflow-hidden">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-[#2C2C2E]">
+                  {['Inicio', 'Fin', 'Duración', 'Acciones'].map(col => (
+                    <th key={col} className="px-4 py-3 text-xs font-medium text-[#636366] uppercase">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {blockedSlots.map(slot => {
+                  const [sh, sm] = slot.startTime.split(':').map(Number);
+                  const [eh, em] = slot.endTime.split(':').map(Number);
+                  const mins = (eh * 60 + em) - (sh * 60 + sm);
+                  return (
+                    <tr key={slot.id} className="border-b border-[#2C2C2E] last:border-0 hover:bg-[#2C2C2E]/30">
+                      <td className="px-4 py-3 text-sm text-white">{slot.startTime}</td>
+                      <td className="px-4 py-3 text-sm text-white">{slot.endTime}</td>
+                      <td className="px-4 py-3 text-sm text-[#8E8E93]">{mins} min</td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => handleUnblock(slot)}
+                          className="text-xs text-[#FF9F0A] hover:text-white transition-colors"
+                        >
+                          Desbloquear
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      )}
+
+      {/* Reserved slots (by users via app) */}
+      {reservedSlots.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium text-[#636366] uppercase">Reservas de usuarios</h3>
+          <Card className="!p-0 overflow-hidden">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-[#2C2C2E]">
+                  {['Inicio', 'Fin', 'Estado'].map(col => (
+                    <th key={col} className="px-4 py-3 text-xs font-medium text-[#636366] uppercase">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {reservedSlots.map(slot => (
+                  <tr key={slot.id} className="border-b border-[#2C2C2E] last:border-0">
+                    <td className="px-4 py-3 text-sm text-white">{slot.startTime}</td>
+                    <td className="px-4 py-3 text-sm text-white">{slot.endTime}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex px-2 py-0.5 rounded-lg text-xs border ${STATUS_COLORS.reserved}`}>
+                        {STATUS_LABEL.reserved}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {blockedSlots.length === 0 && reservedSlots.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Clock size={40} className="text-[#3C3C3E] mb-3" />
-          <p className="text-white font-medium">Sin slots para este día</p>
-          <p className="text-sm text-[#8E8E93] mt-1">Crea slots manualmente o genera automáticamente desde la configuración de horario.</p>
+          <p className="text-white font-medium">Sin bloqueos para este día</p>
+          <p className="text-sm text-[#8E8E93] mt-1">La canasta está completamente libre para reservas de usuarios.</p>
         </div>
-      ) : (
-        <Card className="!p-0 overflow-hidden">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-[#2C2C2E]">
-                {['Inicio', 'Fin', 'Estado', 'Acciones'].map(col => (
-                  <th key={col} className="px-4 py-3 text-xs font-medium text-[#636366] uppercase">{col}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {slots.sort((a, b) => a.startTime.localeCompare(b.startTime)).map(slot => (
-                <tr key={slot.id} className="border-b border-[#2C2C2E] last:border-0 hover:bg-[#2C2C2E]/30">
-                  <td className="px-4 py-3 text-sm text-white">{slot.startTime}</td>
-                  <td className="px-4 py-3 text-sm text-white">{slot.endTime}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex px-2 py-0.5 rounded-lg text-xs border ${STATUS_COLORS[slot.status]}`}>
-                      {STATUS_LABEL[slot.status]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {slot.status !== 'reserved' && (
-                      <button
-                        onClick={() => handleToggleStatus(slot)}
-                        className="text-xs text-[#8E8E93] hover:text-white transition-colors"
-                      >
-                        {slot.status === 'available' ? 'Bloquear' : 'Liberar'}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
       )}
 
       {/* Leyenda */}
       <div className="flex items-center gap-4 text-xs text-[#8E8E93]">
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#7BFF00]" />Disponible</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0A84FF]" />Reservado</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#FF453A]" />Bloqueado</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#7BFF00]" />Libre</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0A84FF]" />Reservado por usuario</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#FF9F0A]" />Bloqueado por el club</span>
       </div>
 
-      {/* Modal crear slot */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Crear slot"
-        footer={<><Button variant="secondary" onClick={() => setShowCreate(false)}>Cancelar</Button><Button onClick={handleCreate}>Crear slot</Button></>}
+      {/* Modal bloquear franja */}
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Bloquear franja horaria"
+        footer={<><Button variant="secondary" onClick={() => setShowCreate(false)}>Cancelar</Button><Button onClick={handleCreate}>Bloquear franja</Button></>}
       >
         <div className="space-y-4">
+          <p className="text-xs text-[#8E8E93]">Los usuarios no podrán reservar la canasta durante esta franja.</p>
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="text-xs text-[#8E8E93] mb-1 block">Hora inicio</label>
               <select className={selectClass + ' w-full'} value={newStart} onChange={e => setNewStart(e.target.value)}>
-                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                {SLOT_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div className="flex-1">
               <label className="text-xs text-[#8E8E93] mb-1 block">Hora fin</label>
               <select className={selectClass + ' w-full'} value={newEnd} onChange={e => setNewEnd(e.target.value)}>
-                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                {SLOT_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-          </div>
-          <div>
-            <label className="text-xs text-[#8E8E93] mb-1 block">Estado</label>
-            <select className={selectClass + ' w-full'} value={newStatus} onChange={e => setNewStatus(e.target.value as 'available' | 'blocked')}>
-              <option value="available">Disponible</option>
-              <option value="blocked">Bloqueado</option>
-            </select>
           </div>
         </div>
       </Modal>
