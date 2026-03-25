@@ -54,7 +54,7 @@ import {
   fbGetGyms, fbGetGymById, fbGetCourts,
   fbGetMatches, fbGetReservations,
   fbGetClubMembers, fbGetStatsOverview, fbGetDailyStats,
-  fbUpdateCourt,
+  fbCreateCourt, fbUpdateCourt,
   fbGetCourtBlocks, fbCreateCourtBlock, fbDeleteCourtBlock,
   fbGetCourtIncidents, fbCreateCourtIncident, fbUpdateCourtIncident,
 } from './firebaseProvider';
@@ -121,6 +121,9 @@ export async function getCourts(gymId?: string): Promise<Court[]> {
 }
 
 export async function createCourt(data: Omit<Court, 'id'>): Promise<Court> {
+  if (USE_FIREBASE) {
+    try { return await fbCreateCourt(data); } catch (e) { console.error('[Firebase] createCourt:', e); throw e; }
+  }
   await delay();
   const newCourt: Court = { ...data, id: `court-${String(courts.length + 1).padStart(3, '0')}` };
   courts.push(newCourt);

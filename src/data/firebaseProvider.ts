@@ -14,7 +14,9 @@ import {
   collection,
   doc,
   getDocs,
+  getDoc,
   updateDoc,
+  setDoc,
   addDoc,
   deleteDoc,
   query,
@@ -322,6 +324,37 @@ export async function fbGetDailyStats(_gymId: string, _courtIds: string[], days:
 // WRITES
 // ══════════════════════════════════════════════════════════════════════════
 
+// ── Create court in Firebase ───────────────────────────────────────────────
+
+export async function fbCreateCourt(data: Omit<Court, 'id'>): Promise<Court> {
+  await ensureFirebaseAuth();
+  const firebaseDoc = {
+    name: data.name,
+    address: data.address || '',
+    locationName: data.location || '',
+    openingTime: data.opening_time || '09:00',
+    closingTime: data.closing_time || '21:00',
+    state: data.is_active ? 'active' : 'inactive',
+    online: data.is_visible !== false,
+    config: {
+      gameMaxDuration: (data.match_duration_minutes || 20) * 60,
+      reservationSlotDuration: (data.slot_duration_minutes || 30) * 60,
+      reservationMinTimeUntilStop: 60,
+      reservationMaxTimeUntilStart: 300,
+      reservationMinDuration: 300,
+      gameMinDuration: 30,
+      recordFullGames: false,
+    },
+    canRecord: false,
+    rtspUrl: '',
+  };
+  const docRef = await addDoc(collection(getDb(), 'courts'), firebaseDoc);
+  return {
+    ...data,
+    id: docRef.id,
+  };
+}
+
 // ── Paso 1: Court config writes (updates existing courts/{id}) ────────────
 
 export async function fbUpdateCourt(courtId: string, data: Partial<Court>): Promise<void> {
@@ -346,7 +379,14 @@ export async function fbUpdateCourt(courtId: string, data: Partial<Court>): Prom
     patch['config.reservationSlotDuration'] = data.slot_duration_minutes * 60;
   }
 
-  await updateDoc(ref, patch);
+  // Use setDoc with merge so it creates the doc if it doesn't exist
+  // (covers courts that only existed as embedded data in reservations)
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    await updateDoc(ref, patch);
+  } else {
+    await setDoc(ref, patch, { merge: true });
+  }
 }
 
 // ── Paso 2: Court blocks (new collection court_blocks) ────────────────────
