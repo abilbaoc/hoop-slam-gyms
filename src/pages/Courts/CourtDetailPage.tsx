@@ -162,9 +162,19 @@ const STATUS_COLORS: Record<CourtSlot['status'], string> = {
 };
 const STATUS_LABEL: Record<CourtSlot['status'], string> = { available: 'Libre', reserved: 'Reservado por usuario', blocked: 'Bloqueado por el club' };
 
-const SLOT_TIMES: string[] = [];
-for (let h = 0; h < 24; h++) for (let m = 0; m < 60; m += 30) {
-  SLOT_TIMES.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+/** Generate time options within court operating hours, every 30 min. */
+function buildCourtTimes(open: string, close: string): string[] {
+  const times: string[] = [];
+  const [oh, om] = open.split(':').map(Number);
+  const [ch, cm] = close.split(':').map(Number);
+  const startMin = oh * 60 + om;
+  const endMin = ch * 60 + cm;
+  for (let m = startMin; m <= endMin; m += 30) {
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    times.push(`${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
+  }
+  return times;
 }
 
 function SlotsTab({ court }: { court: Court }) {
@@ -172,8 +182,9 @@ function SlotsTab({ court }: { court: Court }) {
   const [selectedDate, setSelectedDate] = useState(today);
   const [slots, setSlots] = useState<CourtSlot[]>([]);
   const [showCreate, setShowCreate] = useState(false);
-  const [newStart, setNewStart] = useState(court.opening_time || '09:00');
-  const [newEnd, setNewEnd] = useState('10:00');
+  const courtTimes = buildCourtTimes(court.opening_time || '09:00', court.closing_time || '21:00');
+  const [newStart, setNewStart] = useState(courtTimes[0] || '09:00');
+  const [newEnd, setNewEnd] = useState(courtTimes[1] || '09:30');
 
   const loadSlots = () => getCourtSlots(court.id, selectedDate).then(setSlots);
   useEffect(() => { loadSlots(); }, [court.id, selectedDate]);
@@ -185,6 +196,8 @@ function SlotsTab({ court }: { court: Court }) {
 
   const handleCreate = async () => {
     if (newStart >= newEnd) return toast.error('La hora fin debe ser posterior a la hora inicio');
+    if (newStart < (court.opening_time || '09:00')) return toast.error(`La canasta abre a las ${court.opening_time}`);
+    if (newEnd > (court.closing_time || '21:00')) return toast.error(`La canasta cierra a las ${court.closing_time}`);
     // Check overlap with existing blocked slots
     const overlap = slots.find(s => s.status === 'blocked' && newStart < s.endTime && newEnd > s.startTime);
     if (overlap) return toast.error(`Se solapa con un bloqueo existente (${overlap.startTime} - ${overlap.endTime})`);
@@ -322,13 +335,13 @@ function SlotsTab({ court }: { court: Court }) {
             <div className="flex-1">
               <label className="text-xs text-[#8E8E93] mb-1 block">Hora inicio</label>
               <select className={selectClass + ' w-full'} value={newStart} onChange={e => setNewStart(e.target.value)}>
-                {SLOT_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
+                {courtTimes.slice(0, -1).map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div className="flex-1">
               <label className="text-xs text-[#8E8E93] mb-1 block">Hora fin</label>
               <select className={selectClass + ' w-full'} value={newEnd} onChange={e => setNewEnd(e.target.value)}>
-                {SLOT_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
+                {courtTimes.filter(t => t > newStart).map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           </div>
