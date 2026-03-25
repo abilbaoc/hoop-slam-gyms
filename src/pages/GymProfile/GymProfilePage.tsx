@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { MapPin, Phone, Mail, Clock, Edit2, Hash } from 'lucide-react';
+import { MapPin, Phone, Mail, Clock, Edit2, Hash, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Gym } from '../../types/gym';
-import { getGymById } from '../../data/api';
+import { getGymById, updateGym } from '../../data/api';
 import { useGym } from '../../contexts/GymContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import Card from '../../components/ui/Card';
@@ -12,6 +12,15 @@ export default function GymProfilePage() {
   const { currentGym } = useGym();
   const { canEditGymProfile } = usePermissions();
   const [gym, setGym] = useState<Gym | null>(null);
+  const [editing, setEditing] = useState(false);
+
+  // Edit form state
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (currentGym) {
@@ -20,6 +29,36 @@ export default function GymProfilePage() {
       });
     }
   }, [currentGym]);
+
+  const startEditing = () => {
+    if (!gym) return;
+    setName(gym.name);
+    setAddress(gym.address);
+    setCity(gym.city);
+    setPhone(gym.phone);
+    setEmail(gym.email);
+    setEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setEditing(false);
+  };
+
+  const handleSave = async () => {
+    if (!gym) return;
+    if (!name.trim()) return toast.error('El nombre es obligatorio');
+    setSaving(true);
+    try {
+      const updated = await updateGym(gym.id, { name, address, city, phone, email });
+      setGym(updated);
+      setEditing(false);
+      toast.success('Perfil actualizado');
+    } catch {
+      toast.error('Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (!gym) {
     return (
@@ -36,9 +75,7 @@ export default function GymProfilePage() {
     .join('')
     .toUpperCase();
 
-  const handleEdit = () => {
-    toast.success('Guardado');
-  };
+  const inputClass = 'w-full bg-[#2C2C2E] text-white text-sm rounded-xl px-4 py-2.5 border border-[#2C2C2E] outline-none focus:border-[#7BFF00] placeholder-[#636366]';
 
   return (
     <div className="space-y-6">
@@ -51,47 +88,84 @@ export default function GymProfilePage() {
           <h1 className="text-2xl font-bold text-white">{gym.name}</h1>
           <p className="text-sm text-[#8E8E93]">{gym.city}</p>
         </div>
-        {canEditGymProfile && (
-          <Button variant="secondary" size="sm" onClick={handleEdit}>
+        {canEditGymProfile && !editing && (
+          <Button variant="secondary" size="sm" onClick={startEditing}>
             <Edit2 size={14} />
             Editar
           </Button>
+        )}
+        {editing && (
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={cancelEditing} disabled={saving}>
+              <X size={14} />
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={handleSave} disabled={saving}>
+              <Check size={14} />
+              {saving ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </div>
         )}
       </div>
 
       {/* Info Card */}
       <Card className="space-y-4">
-        <h2 className="text-lg font-semibold text-white">Informacion del gimnasio</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="flex items-start gap-3">
-            <MapPin size={16} className="text-[#7BFF00] mt-0.5 flex-shrink-0" />
+        <h2 className="text-lg font-semibold text-white">Informacion del club</h2>
+        {editing ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-[#636366]">Direccion</p>
-              <p className="text-sm text-white">{gym.address}</p>
+              <label className="text-xs text-[#8E8E93] mb-1 block">Nombre *</label>
+              <input className={inputClass} value={name} onChange={e => setName(e.target.value)} placeholder="Nombre del club" />
+            </div>
+            <div>
+              <label className="text-xs text-[#8E8E93] mb-1 block">Ciudad</label>
+              <input className={inputClass} value={city} onChange={e => setCity(e.target.value)} placeholder="Ciudad" />
+            </div>
+            <div>
+              <label className="text-xs text-[#8E8E93] mb-1 block">Direccion</label>
+              <input className={inputClass} value={address} onChange={e => setAddress(e.target.value)} placeholder="Direccion completa" />
+            </div>
+            <div>
+              <label className="text-xs text-[#8E8E93] mb-1 block">Telefono</label>
+              <input className={inputClass} value={phone} onChange={e => setPhone(e.target.value)} placeholder="Telefono" />
+            </div>
+            <div>
+              <label className="text-xs text-[#8E8E93] mb-1 block">Email</label>
+              <input className={inputClass} value={email} onChange={e => setEmail(e.target.value)} placeholder="Email de contacto" />
             </div>
           </div>
-          <div className="flex items-start gap-3">
-            <MapPin size={16} className="text-[#7BFF00] mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-xs text-[#636366]">Ciudad</p>
-              <p className="text-sm text-white">{gym.city}</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-start gap-3">
+              <MapPin size={16} className="text-[#7BFF00] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-[#636366]">Direccion</p>
+                <p className="text-sm text-white">{gym.address || '—'}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <MapPin size={16} className="text-[#7BFF00] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-[#636366]">Ciudad</p>
+                <p className="text-sm text-white">{gym.city || '—'}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Phone size={16} className="text-[#7BFF00] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-[#636366]">Telefono</p>
+                <p className="text-sm text-white">{gym.phone || '—'}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Mail size={16} className="text-[#7BFF00] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-[#636366]">Email</p>
+                <p className="text-sm text-white">{gym.email || '—'}</p>
+              </div>
             </div>
           </div>
-          <div className="flex items-start gap-3">
-            <Phone size={16} className="text-[#7BFF00] mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-xs text-[#636366]">Telefono</p>
-              <p className="text-sm text-white">{gym.phone}</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <Mail size={16} className="text-[#7BFF00] mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-xs text-[#636366]">Email</p>
-              <p className="text-sm text-white">{gym.email}</p>
-            </div>
-          </div>
-        </div>
+        )}
       </Card>
 
       {/* Opening Hours Card */}
@@ -133,16 +207,8 @@ export default function GymProfilePage() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <div>
-            <p className="text-xs text-[#636366]">Canchas</p>
+            <p className="text-xs text-[#636366]">Cestas</p>
             <p className="text-2xl font-bold text-[#7BFF00]">{gym.courts.length}</p>
-          </div>
-          <div>
-            <p className="text-xs text-[#636366]">Partidos esta semana</p>
-            <p className="text-2xl font-bold text-white">--</p>
-          </div>
-          <div>
-            <p className="text-xs text-[#636366]">Ocupacion media</p>
-            <p className="text-2xl font-bold text-white">--</p>
           </div>
         </div>
       </Card>
