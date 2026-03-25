@@ -54,6 +54,13 @@ import {
   fbGetGyms, fbGetGymById, fbGetCourts,
   fbGetMatches, fbGetReservations,
   fbGetClubMembers, fbGetStatsOverview, fbGetDailyStats,
+  fbUpdateCourt,
+  fbGetCourtBlocks, fbCreateCourtBlock, fbDeleteCourtBlock,
+  fbGetCourtIncidents, fbCreateCourtIncident, fbUpdateCourtIncident,
+} from './firebaseProvider';
+import type {
+  FirebaseCourtBlock, FirebaseCourtIncident,
+  IncidentType, IncidentPriority, IncidentStatus,
 } from './firebaseProvider';
 
 const USE_FIREBASE = import.meta.env.VITE_DATA_SOURCE === 'firebase' && isFirebaseConfigured;
@@ -124,6 +131,15 @@ export async function createCourt(data: Omit<Court, 'id'>): Promise<Court> {
 }
 
 export async function updateCourt(id: string, data: Partial<Court>): Promise<Court> {
+  if (USE_FIREBASE) {
+    try {
+      await fbUpdateCourt(id, data);
+      // Re-fetch to get the updated court
+      const updatedCourts = await fbGetCourts();
+      const updated = updatedCourts.find(c => c.id === id);
+      if (updated) return updated;
+    } catch (e) { console.error('[Firebase] updateCourt:', e); }
+  }
   await delay();
   const idx = courts.findIndex((c) => c.id === id);
   if (idx === -1) throw new Error('Court not found');
@@ -558,14 +574,47 @@ export async function getDailyStats(gymId: string, days: number): Promise<DailyS
   return result;
 }
 
-// ── Court Slots ──
+// ── Court Slots (backed by Firebase court_blocks) ──
 
 export async function getCourtSlots(courtId: string, date: string): Promise<CourtSlot[]> {
+  if (USE_FIREBASE) {
+    try {
+      const blocks = await fbGetCourtBlocks(courtId, date);
+      return blocks.map(b => ({
+        id: b.id,
+        courtId: b.courtId,
+        date: b.date,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        status: 'blocked' as const,
+        createdAt: b.createdAt,
+      }));
+    } catch (e) { console.error('[Firebase] getCourtSlots:', e); }
+  }
   await delay();
   return courtSlotsData.filter((s) => s.courtId === courtId && s.date === date);
 }
 
 export async function createCourtSlot(data: Omit<CourtSlot, 'id' | 'createdAt'>): Promise<CourtSlot> {
+  if (USE_FIREBASE) {
+    try {
+      const block = await fbCreateCourtBlock({
+        courtId: data.courtId,
+        date: data.date,
+        startTime: data.startTime,
+        endTime: data.endTime,
+      });
+      return {
+        id: block.id,
+        courtId: block.courtId,
+        date: block.date,
+        startTime: block.startTime,
+        endTime: block.endTime,
+        status: 'blocked',
+        createdAt: block.createdAt,
+      };
+    } catch (e) { console.error('[Firebase] createCourtSlot:', e); throw e; }
+  }
   await delay();
   const slot: CourtSlot = {
     ...data,
@@ -577,6 +626,13 @@ export async function createCourtSlot(data: Omit<CourtSlot, 'id' | 'createdAt'>)
 }
 
 export async function updateCourtSlot(id: string, data: Partial<CourtSlot>): Promise<CourtSlot> {
+  if (USE_FIREBASE && data.status === 'available') {
+    // "Unblock" = delete the block from Firebase
+    try {
+      await fbDeleteCourtBlock(id);
+      return { id, courtId: '', date: '', startTime: '', endTime: '', status: 'available', createdAt: '' };
+    } catch (e) { console.error('[Firebase] updateCourtSlot:', e); throw e; }
+  }
   await delay();
   const idx = courtSlotsData.findIndex((s) => s.id === id);
   if (idx === -1) throw new Error('Court slot not found');
@@ -585,10 +641,45 @@ export async function updateCourtSlot(id: string, data: Partial<CourtSlot>): Pro
 }
 
 export async function deleteCourtSlot(id: string): Promise<void> {
+  if (USE_FIREBASE) {
+    try { await fbDeleteCourtBlock(id); return; } catch (e) { console.error('[Firebase] deleteCourtSlot:', e); throw e; }
+  }
   await delay();
   const idx = courtSlotsData.findIndex((s) => s.id === id);
   if (idx === -1) throw new Error('Court slot not found');
   courtSlotsData.splice(idx, 1);
+}
+
+// ── Incidents (backed by Firebase court_incidents) ──
+
+export { type FirebaseCourtIncident, type IncidentType, type IncidentPriority, type IncidentStatus } from './firebaseProvider';
+
+export async function getIncidents(courtId?: string): Promise<FirebaseCourtIncident[]> {
+  if (USE_FIREBASE) {
+    try { return await fbGetCourtIncidents(courtId); } catch (e) { console.error('[Firebase] getIncidents:', e); }
+  }
+  return [];
+}
+
+export async function createIncident(data: {
+  courtId: string;
+  reservationId?: string;
+  type: IncidentType;
+  title: string;
+  description: string;
+  priority: IncidentPriority;
+}): Promise<FirebaseCourtIncident> {
+  if (USE_FIREBASE) {
+    return await fbCreateCourtIncident(data);
+  }
+  throw new Error('Firebase not configured');
+}
+
+export async function updateIncident(id: string, data: { status?: IncidentStatus; resolvedBy?: string }): Promise<void> {
+  if (USE_FIREBASE) {
+    return await fbUpdateCourtIncident(id, data);
+  }
+  throw new Error('Firebase not configured');
 }
 
 export async function createGym(data: { name: string; city: string; address?: string }): Promise<Gym> {

@@ -12,8 +12,16 @@
 
 import {
   collection,
+  doc,
   getDocs,
+  updateDoc,
+  addDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
   Timestamp,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { getDb, ensureFirebaseAuth } from '../lib/firebase';
 import type { Gym } from '../types/gym';
@@ -308,4 +316,188 @@ export async function fbGetDailyStats(_gymId: string, _courtIds: string[], days:
     });
   }
   return result;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// WRITES
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Paso 1: Court config writes (updates existing courts/{id}) ────────────
+
+export async function fbUpdateCourt(courtId: string, data: Partial<Court>): Promise<void> {
+  await ensureFirebaseAuth();
+  const ref = doc(getDb(), 'courts', courtId);
+
+  // Map camelCase dashboard fields to Firestore field names
+  const patch: Record<string, unknown> = {};
+  if (data.name !== undefined) patch.name = data.name;
+  if (data.address !== undefined) patch.address = data.address;
+  if (data.location !== undefined) patch.locationName = data.location;
+  if (data.opening_time !== undefined) patch.openingTime = data.opening_time;
+  if (data.closing_time !== undefined) patch.closingTime = data.closing_time;
+  if (data.is_active !== undefined) {
+    patch.state = data.is_active ? 'active' : 'inactive';
+  }
+  if (data.is_visible !== undefined) patch.online = data.is_visible;
+  if (data.match_duration_minutes !== undefined) {
+    patch['config.gameMaxDuration'] = data.match_duration_minutes * 60; // Firestore stores seconds
+  }
+  if (data.slot_duration_minutes !== undefined) {
+    patch['config.reservationSlotDuration'] = data.slot_duration_minutes * 60;
+  }
+
+  await updateDoc(ref, patch);
+}
+
+// ── Paso 2: Court blocks (new collection court_blocks) ────────────────────
+
+export interface FirebaseCourtBlock {
+  id: string;
+  courtId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  reason?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export async function fbGetCourtBlocks(courtId: string, date: string): Promise<FirebaseCourtBlock[]> {
+  await ensureFirebaseAuth();
+  const q = query(
+    collection(getDb(), 'court_blocks'),
+    where('courtId', '==', courtId),
+    where('date', '==', date),
+    orderBy('startTime'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => {
+    const data = d.data();
+    return {
+      id: d.id,
+      courtId: data.courtId as string,
+      date: data.date as string,
+      startTime: data.startTime as string,
+      endTime: data.endTime as string,
+      reason: data.reason as string | undefined,
+      createdBy: data.createdBy as string,
+      createdAt: toIso(data.createdAt),
+    };
+  });
+}
+
+export async function fbCreateCourtBlock(data: {
+  courtId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  reason?: string;
+}): Promise<FirebaseCourtBlock> {
+  await ensureFirebaseAuth();
+  const docRef = await addDoc(collection(getDb(), 'court_blocks'), {
+    ...data,
+    createdBy: 'laieta@hoopslam.net',
+    createdAt: serverTimestamp(),
+  });
+  return {
+    id: docRef.id,
+    ...data,
+    createdBy: 'laieta@hoopslam.net',
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export async function fbDeleteCourtBlock(blockId: string): Promise<void> {
+  await ensureFirebaseAuth();
+  await deleteDoc(doc(getDb(), 'court_blocks', blockId));
+}
+
+// ── Paso 3: Court incidents (new collection court_incidents) ──────────────
+
+export type IncidentType = 'hardware' | 'software' | 'user_report' | 'maintenance';
+export type IncidentStatus = 'open' | 'in_progress' | 'resolved';
+export type IncidentPriority = 'low' | 'medium' | 'high' | 'critical';
+
+export interface FirebaseCourtIncident {
+  id: string;
+  courtId: string;
+  reservationId?: string;
+  type: IncidentType;
+  title: string;
+  description: string;
+  status: IncidentStatus;
+  priority: IncidentPriority;
+  reportedBy: string;
+  resolvedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+}
+
+export async function fbGetCourtIncidents(courtId?: string): Promise<FirebaseCourtIncident[]> {
+  await ensureFirebaseAuth();
+  const ref = collection(getDb(), 'court_incidents');
+  const q = courtId
+    ? query(ref, where('courtId', '==', courtId), orderBy('createdAt', 'desc'))
+    : query(ref, orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => {
+    const data = d.data();
+    return {
+      id: d.id,
+      courtId: data.courtId as string,
+      reservationId: data.reservationId as string | undefined,
+      type: (data.type as IncidentType) ?? 'maintenance',
+      title: data.title as string,
+      description: data.description as string,
+      status: (data.status as IncidentStatus) ?? 'open',
+      priority: (data.priority as IncidentPriority) ?? 'medium',
+      reportedBy: data.reportedBy as string,
+      resolvedBy: data.resolvedBy as string | undefined,
+      createdAt: toIso(data.createdAt),
+      updatedAt: toIso(data.updatedAt ?? data.createdAt),
+      resolvedAt: data.resolvedAt ? toIso(data.resolvedAt) : undefined,
+    };
+  });
+}
+
+export async function fbCreateCourtIncident(data: {
+  courtId: string;
+  reservationId?: string;
+  type: IncidentType;
+  title: string;
+  description: string;
+  priority: IncidentPriority;
+}): Promise<FirebaseCourtIncident> {
+  await ensureFirebaseAuth();
+  const now = serverTimestamp();
+  const docRef = await addDoc(collection(getDb(), 'court_incidents'), {
+    ...data,
+    status: 'open',
+    reportedBy: 'laieta@hoopslam.net',
+    createdAt: now,
+    updatedAt: now,
+  });
+  return {
+    id: docRef.id,
+    ...data,
+    status: 'open',
+    reportedBy: 'laieta@hoopslam.net',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export async function fbUpdateCourtIncident(incidentId: string, data: {
+  status?: IncidentStatus;
+  resolvedBy?: string;
+}): Promise<void> {
+  await ensureFirebaseAuth();
+  const patch: Record<string, unknown> = { updatedAt: serverTimestamp() };
+  if (data.status !== undefined) patch.status = data.status;
+  if (data.status === 'resolved') {
+    patch.resolvedAt = serverTimestamp();
+    patch.resolvedBy = data.resolvedBy ?? 'laieta@hoopslam.net';
+  }
+  await updateDoc(doc(getDb(), 'court_incidents', incidentId), patch);
 }
