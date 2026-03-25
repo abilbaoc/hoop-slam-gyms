@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Shield, Building2, UserCircle, Loader2, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -145,10 +145,6 @@ function SupabaseLogin() {
           {loading ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Iniciar sesion'}
         </Button>
       </Card>
-      <p className="text-center text-sm text-[#8E8E93]">
-        No tienes cuenta?{' '}
-        <Link to="/signup" className="text-[#7BFF00] hover:underline">Registrate</Link>
-      </p>
     </form>
   );
 }

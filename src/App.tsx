@@ -52,7 +52,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/signup" element={<Navigate to="/login" replace />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/pending" element={<PendingPage />} />
