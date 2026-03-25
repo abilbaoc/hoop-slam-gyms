@@ -69,18 +69,18 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
             <span className="text-sm text-white">Canasta activa</span>
             <button
               onClick={handleToggleActive}
-              className={`w-11 h-6 rounded-full transition-colors relative ${court.is_active ? 'bg-[#7BFF00]' : 'bg-[#3C3C3E]'}`}
+              className={`w-12 h-7 rounded-full transition-colors duration-200 relative flex-shrink-0 ${court.is_active ? 'bg-[#7BFF00]' : 'bg-[#3C3C3E]'}`}
             >
-              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${court.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              <span className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${court.is_active ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-white">Visible en la app</span>
             <button
               onClick={handleToggleVisible}
-              className={`w-11 h-6 rounded-full transition-colors relative ${court.is_visible ? 'bg-[#7BFF00]' : 'bg-[#3C3C3E]'}`}
+              className={`w-12 h-7 rounded-full transition-colors duration-200 relative flex-shrink-0 ${court.is_visible ? 'bg-[#7BFF00]' : 'bg-[#3C3C3E]'}`}
             >
-              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${court.is_visible ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              <span className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${court.is_visible ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
         </div>
