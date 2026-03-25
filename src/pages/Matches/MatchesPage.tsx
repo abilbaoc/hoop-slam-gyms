@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trophy, Users, Clock, Filter } from 'lucide-react';
+import { Trophy, Users, Filter } from 'lucide-react';
 import { useGymLayout } from '../../layouts/GymLayout';
 import { getMatches } from '../../data/api';
 import type { Match, MatchFormat } from '../../types';
@@ -72,7 +72,7 @@ export default function MatchesPage() {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-[#2C2C2E]">
-                {['Fecha', 'Canasta', 'Modalidad', 'Jugadores', 'Duracion', ''].map(col => (
+                {['Fecha', 'Canasta', 'Modalidad', 'Resultado', 'Jugadores'].map(col => (
                   <th key={col} className="px-4 py-3 text-xs font-medium text-[#636366] uppercase">{col}</th>
                 ))}
               </tr>
@@ -91,6 +91,13 @@ export default function MatchesPage() {
                       <Badge variant={FORMAT_COLOR[match.format]}>{FORMAT_LABEL[match.format]}</Badge>
                     </td>
                     <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-bold text-white">{match.scoreA}</span>
+                        <span className="text-xs text-[#636366]">—</span>
+                        <span className="text-lg font-bold text-white">{match.scoreB}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
                       {match.players && match.players.length > 0 ? (
                         <div className="flex items-center gap-1.5">
                           <Users size={14} className="text-[#636366] flex-shrink-0" />
@@ -99,15 +106,6 @@ export default function MatchesPage() {
                       ) : (
                         <span className="text-sm text-[#636366]">{match.playerCount} jugador{match.playerCount !== 1 ? 'es' : ''}</span>
                       )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5 text-sm text-[#8E8E93]">
-                        <Clock size={14} className="flex-shrink-0" />
-                        {match.duration} min
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant="green">Completado</Badge>
                     </td>
                   </tr>
                 );

@@ -123,7 +123,7 @@ export async function fbGetCourts(_gymId?: string): Promise<Court[]> {
   return [...courtsMap.values()];
 }
 
-// ── Matches (derived from finished reservations) ──────────────────────────
+// ── Matches (from reservations/{id}/games subcollection — real scores) ─────
 
 export async function fbGetMatches(filters?: {
   courtId?: string;
@@ -132,44 +132,44 @@ export async function fbGetMatches(filters?: {
   gymId?: string;
 }): Promise<Match[]> {
   await ensureFirebaseAuth();
-  const snap = await getDocs(collection(getDb(), 'reservations'));
+  const resSnap = await getDocs(collection(getDb(), 'reservations'));
 
   let results: Match[] = [];
 
-  snap.docs.forEach(d => {
-    const data = d.data();
-    const state = data.state as string;
-    // Only finished reservations count as played matches
-    if (state !== 'finished' && state !== 'finished_by_system') return;
+  for (const rDoc of resSnap.docs) {
+    const rData = rDoc.data();
+    const gamesSnap = await getDocs(collection(getDb(), 'reservations', rDoc.id, 'games'));
+    if (gamesSnap.empty) continue;
 
-    const startDate = toIso(data.startDate);
-    const endDate = toIso(data.endDate);
-    const playerCount = (data.playerIds as string[] | undefined)?.length ?? 1;
-    const format = guessFormat(playerCount);
-    const durationMin = Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 60000);
+    // Extract player nicknames from reservation's embedded team data
+    const team1Names = (rData.team1Players as Array<{ name?: string }>) ?? [];
+    const team2Names = (rData.team2Players as Array<{ name?: string }>) ?? [];
+    const playerNames = [...team1Names, ...team2Names].map(p => p.name).filter(Boolean) as string[];
+    const courtName = (rData.court as { name?: string })?.name ?? '';
 
-    // Extract player nicknames from embedded team data
-    const team1 = (data.team1Players as Array<{ name?: string }>) ?? [];
-    const team2 = (data.team2Players as Array<{ name?: string }>) ?? [];
-    const players = [...team1, ...team2].map(p => p.name).filter(Boolean) as string[];
+    for (const gDoc of gamesSnap.docs) {
+      const g = gDoc.data();
+      if (g.state !== 'finished') continue;
 
-    // Extract court name from embedded court object
-    const courtName = (data.court as { name?: string })?.name ?? '';
+      const gameDate = toIso(g.createdAt);
+      const playerCount = (g.playerIds as string[] | undefined)?.length ?? 1;
+      const format = guessFormat(playerCount);
 
-    results.push({
-      id: d.id,
-      courtId: data.courtId ?? '',
-      courtName,
-      format,
-      scoreA: 0, // no score data in Firestore
-      scoreB: 0,
-      duration: durationMin > 0 ? durationMin : 20,
-      startedAt: startDate,
-      endedAt: endDate,
-      playerCount,
-      players,
-    });
-  });
+      results.push({
+        id: gDoc.id,
+        courtId: rData.courtId ?? '',
+        courtName,
+        format,
+        scoreA: (g.team1Points as number) ?? 0,
+        scoreB: (g.team2Points as number) ?? 0,
+        duration: 0, // individual game duration not tracked
+        startedAt: gameDate,
+        endedAt: gameDate,
+        playerCount,
+        players: playerNames,
+      });
+    }
+  }
 
   // Apply filters
   if (filters?.courtId) results = results.filter(m => m.courtId === filters.courtId);
