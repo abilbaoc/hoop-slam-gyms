@@ -45,7 +45,7 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
     if (!name.trim()) return toast.error('El nombre es obligatorio');
     if (!address.trim()) return toast.error('La dirección es obligatoria');
     if (openingTime >= closingTime) return toast.error('La apertura debe ser anterior al cierre');
-    if (slotDuration > matchDuration) return toast.error('La duración del slot no puede superar la del partido');
+    if (matchDuration > slotDuration) return toast.error('La duración del partido no puede superar la del slot');
     setSaving(true);
     try {
       const updated = await updateCourt(court.id, { name, address, opening_time: openingTime, closing_time: closingTime, match_duration_minutes: matchDuration, slot_duration_minutes: slotDuration });
@@ -139,7 +139,7 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
             </select>
           </div>
         </div>
-        <p className="text-xs text-[#636366] mt-2">La duración del slot debe ser ≤ duración del partido.</p>
+        <p className="text-xs text-[#636366] mt-2">La duración del partido debe ser ≤ duración del slot.</p>
       </Card>
 
       <div className="flex justify-end gap-3">
