@@ -22,7 +22,7 @@ export function useGymLayout() {
 
 export default function GymLayout() {
   const { gymId } = useParams<{ gymId: string }>();
-  const { canAccessGym, isAuthenticated, currentUser, updateUserGymIds } = useAuth();
+  const { isAuthenticated, currentUser, updateUserGymIds } = useAuth();
   const [gym, setGym] = useState<Gym | null | undefined>(undefined); // undefined=loading, null=not found
 
   useEffect(() => {
