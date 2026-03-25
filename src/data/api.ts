@@ -569,7 +569,7 @@ export async function createCourtSlot(data: Omit<CourtSlot, 'id' | 'createdAt'>)
   await delay();
   const slot: CourtSlot = {
     ...data,
-    id: `slot-${String(courtSlotsData.length + 1).padStart(3, '0')}`,
+    id: `slot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     createdAt: new Date().toISOString(),
   };
   courtSlotsData.push(slot);
