@@ -148,9 +148,18 @@ export async function fbGetMatches(filters?: {
     const format = guessFormat(playerCount);
     const durationMin = Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 60000);
 
+    // Extract player nicknames from embedded team data
+    const team1 = (data.team1Players as Array<{ name?: string }>) ?? [];
+    const team2 = (data.team2Players as Array<{ name?: string }>) ?? [];
+    const players = [...team1, ...team2].map(p => p.name).filter(Boolean) as string[];
+
+    // Extract court name from embedded court object
+    const courtName = (data.court as { name?: string })?.name ?? '';
+
     results.push({
       id: d.id,
       courtId: data.courtId ?? '',
+      courtName,
       format,
       scoreA: 0, // no score data in Firestore
       scoreB: 0,
@@ -158,6 +167,7 @@ export async function fbGetMatches(filters?: {
       startedAt: startDate,
       endedAt: endDate,
       playerCount,
+      players,
     });
   });
 

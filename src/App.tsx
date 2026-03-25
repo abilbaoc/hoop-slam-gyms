@@ -10,14 +10,13 @@ import PendingPage from './pages/Auth/PendingPage';
 import GymProfilePage from './pages/GymProfile/GymProfilePage';
 import UsersPage from './pages/Users/UsersPage';
 import ReservationsPage from './pages/Reservations/ReservationsPage';
+import MatchesPage from './pages/Matches/MatchesPage';
 import MaintenancePage from './pages/Maintenance/MaintenancePage';
 import OnboardingPage from './pages/Onboarding/OnboardingPage';
 import PrivacyPolicyPage from './pages/Privacy/PrivacyPolicyPage';
-import ClubMembersPage from './pages/ClubMembers/ClubMembersPage';
 import NotificationsPage from './pages/Notifications/NotificationsPage';
 import AdminClubsPage from './pages/Admin/AdminClubsPage';
 import AdminGestoresPage from './pages/Admin/AdminGestoresPage';
-import TeamPage from './pages/Team/TeamPage';
 import CookieBanner from './components/ui/CookieBanner';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -66,13 +65,12 @@ function AppRoutes() {
         <Route path="dashboard" element={<OverviewPage />} />
         <Route path="courts" element={<CourtsPage />} />
         <Route path="courts/:id" element={<CourtDetailPage />} />
+        <Route path="matches" element={<MatchesPage />} />
         <Route path="reservations" element={<ReservationsPage />} />
+        <Route path="gestores" element={<UsersPage />} />
         <Route path="profile" element={<GymProfilePage />} />
-        <Route path="users" element={<UsersPage />} />
         <Route path="maintenance" element={<MaintenancePage />} />
-        <Route path="members" element={<ClubMembersPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="team" element={<TeamPage />} />
         <Route index element={<Navigate to="dashboard" replace />} />
       </Route>
     </Routes>
