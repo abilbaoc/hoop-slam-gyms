@@ -234,20 +234,41 @@ export async function fbGetReservations(filters?: {
 
 export async function fbGetClubMembers(_gymId: string): Promise<ClubMember[]> {
   await ensureFirebaseAuth();
-  const snap = await getDocs(collection(getDb(), 'users'));
-  return snap.docs
+  const [usersSnap, statsSnap] = await Promise.all([
+    getDocs(collection(getDb(), 'users')),
+    getDocs(collection(getDb(), 'stats')),
+  ]);
+
+  // Build stats lookup by user ID
+  const statsMap = new Map<string, { level?: number; gamesPlayed?: number; gamesWon?: number; winPercentage?: number }>();
+  statsSnap.docs.forEach(d => {
+    const data = d.data();
+    statsMap.set(d.id, {
+      level: data.level as number | undefined,
+      gamesPlayed: data.gamesPlayed as number | undefined,
+      gamesWon: data.gamesWon as number | undefined,
+      winPercentage: data.winPercentage as number | undefined,
+    });
+  });
+
+  return usersSnap.docs
     .filter(d => {
       const data = d.data();
       return data.state !== 'deleted' && data.name;
     })
     .map(d => {
       const data = d.data();
+      const stats = statsMap.get(d.id);
       return {
         id: d.id,
         gymId: LAIETA_GYM_ID,
         userId: d.id,
         nickname: data.username ?? data.name ?? '',
         joinedAt: toIso(data.createdAt),
+        level: stats?.level ?? (data.level as number | undefined),
+        gamesPlayed: stats?.gamesPlayed,
+        gamesWon: stats?.gamesWon,
+        winPercentage: stats?.winPercentage,
       } satisfies ClubMember;
     });
 }

@@ -1,114 +1,105 @@
-import { useState, useEffect, useMemo } from 'react';
-import { UserPlus } from 'lucide-react';
-import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
-import type { AppUser, UserRole } from '../../types/auth';
-import { ROLE_LABELS } from '../../types/auth';
-import { getUsers } from '../../data/api';
+import { useState, useEffect } from 'react';
+import { Users } from 'lucide-react';
+import { getClubMembers } from '../../data/api';
 import { useGym } from '../../contexts/GymContext';
-import { usePermissions } from '../../hooks/usePermissions';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
-import { Button } from '../../components/ui/Button';
-import { Tabs } from '../../components/ui/Tabs';
-
-const roleTabs = [
-  { id: 'all', label: 'Todos' },
-  { id: 'admin', label: 'Admin' },
-  { id: 'gestor', label: 'Gestor' },
-  { id: 'staff', label: 'Staff' },
-];
-
-const roleBadgeVariant: Record<UserRole, 'green' | 'blue' | 'gray'> = {
-  admin: 'green',
-  gestor: 'blue',
-  staff: 'gray',
-};
+import type { ClubMember } from '../../types/club_member';
 
 export default function UsersPage() {
   const { currentGym } = useGym();
-  const { canManageUsers } = usePermissions();
-  const [users, setUsers] = useState<AppUser[]>([]);
-  const [roleFilter, setRoleFilter] = useState('all');
+  const [members, setMembers] = useState<ClubMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
-    getUsers(currentGym?.id).then(setUsers);
-  }, [currentGym]);
+    setLoading(true);
+    getClubMembers(currentGym?.id ?? '').then(data => {
+      setMembers(data);
+      setLoading(false);
+    });
+  }, [currentGym?.id]);
 
-  const filtered = useMemo(() => {
-    if (roleFilter === 'all') return users;
-    return users.filter((u) => u.role === roleFilter);
-  }, [users, roleFilter]);
+  const filtered = search
+    ? members.filter(m => m.nickname.toLowerCase().includes(search.toLowerCase()))
+    : members;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Usuarios</h1>
-          <p className="text-sm text-[#8E8E93]">{users.length} usuarios registrados</p>
-        </div>
-        {canManageUsers && (
-          <Button variant="primary" size="sm" onClick={() => toast.success('Proximamente')}>
-            <UserPlus size={16} />
-            Invitar Usuario
-          </Button>
-        )}
+      <div>
+        <h1 className="text-4xl text-white leading-none">Usuarios</h1>
+        <p className="text-[#8E8E93] text-sm mt-1 font-['Poppins'] normal-case font-normal">
+          Jugadores registrados en la app ({members.length})
+        </p>
       </div>
 
-      {/* Tabs */}
-      <Tabs tabs={roleTabs} active={roleFilter} onChange={setRoleFilter} />
+      {/* Search */}
+      <input
+        type="text"
+        placeholder="Buscar por nickname..."
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        className="w-full max-w-sm bg-[#2C2C2E] text-white text-sm rounded-xl px-4 py-2.5 border border-[#2C2C2E] outline-none focus:border-[#7BFF00] placeholder-[#636366]"
+      />
 
-      {/* User list */}
-      <Card className="overflow-x-auto !p-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-[#636366] text-xs border-b border-[#2C2C2E]">
-              <th className="text-left py-3 px-4 font-medium">Usuario</th>
-              <th className="text-left py-3 px-4 font-medium hidden sm:table-cell">Email</th>
-              <th className="text-left py-3 px-4 font-medium">Rol</th>
-              <th className="text-left py-3 px-4 font-medium hidden md:table-cell">Ultima actividad</th>
-              {canManageUsers && <th className="py-3 px-4 font-medium w-20" />}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((user) => (
-              <tr key={user.id} className="border-b border-[#2C2C2E] last:border-0 hover:bg-[#2C2C2E]/30 transition-colors">
-                <td className="py-3 px-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#7BFF00]/20 flex items-center justify-center flex-shrink-0">
-                      <span className="text-[#7BFF00] text-xs font-bold">{user.avatarInitials}</span>
-                    </div>
-                    <span className="text-white font-medium">{user.name}</span>
-                  </div>
-                </td>
-                <td className="py-3 px-4 text-[#8E8E93] hidden sm:table-cell">{user.email}</td>
-                <td className="py-3 px-4">
-                  <Badge variant={roleBadgeVariant[user.role]}>{ROLE_LABELS[user.role]}</Badge>
-                </td>
-                <td className="py-3 px-4 text-[#8E8E93] hidden md:table-cell">
-                  {formatDistanceToNow(new Date(user.lastActiveAt), { addSuffix: true, locale: es })}
-                </td>
-                {canManageUsers && (
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-6 h-6 border-2 border-[#7BFF00] border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Users size={40} className="text-[#3C3C3E] mb-3" />
+          <p className="text-white font-medium">
+            {search ? 'No se encontraron jugadores' : 'Sin jugadores registrados'}
+          </p>
+        </div>
+      ) : (
+        <Card className="overflow-x-auto !p-0">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[#636366] text-xs border-b border-[#2C2C2E]">
+                <th className="text-left py-3 px-4 font-medium">Nickname</th>
+                <th className="text-left py-3 px-4 font-medium hidden sm:table-cell">Nivel</th>
+                <th className="text-left py-3 px-4 font-medium hidden md:table-cell">Partidos</th>
+                <th className="text-left py-3 px-4 font-medium hidden md:table-cell">Victorias</th>
+                <th className="text-left py-3 px-4 font-medium hidden lg:table-cell">% Victorias</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((member) => (
+                <tr key={member.id} className="border-b border-[#2C2C2E] last:border-0 hover:bg-[#2C2C2E]/30 transition-colors">
                   <td className="py-3 px-4">
-                    <Button variant="ghost" size="sm" onClick={() => toast.success('Proximamente')}>
-                      Editar
-                    </Button>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#7BFF00]/20 flex items-center justify-center flex-shrink-0">
+                        <span className="text-[#7BFF00] text-xs font-bold">
+                          {member.nickname.slice(0, 2).toUpperCase()}
+                        </span>
+                      </div>
+                      <span className="text-white font-medium">{member.nickname}</span>
+                    </div>
                   </td>
-                )}
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-[#8E8E93]">
-                  No se encontraron usuarios
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+                  <td className="py-3 px-4 hidden sm:table-cell">
+                    {member.level != null ? (
+                      <span className="text-white font-medium">{member.level.toFixed(1)}</span>
+                    ) : <span className="text-[#636366]">—</span>}
+                  </td>
+                  <td className="py-3 px-4 text-[#8E8E93] hidden md:table-cell">
+                    {member.gamesPlayed ?? '—'}
+                  </td>
+                  <td className="py-3 px-4 text-[#8E8E93] hidden md:table-cell">
+                    {member.gamesWon ?? '—'}
+                  </td>
+                  <td className="py-3 px-4 hidden lg:table-cell">
+                    {member.winPercentage != null ? (
+                      <span className="text-white">{Math.round(member.winPercentage * 100)}%</span>
+                    ) : <span className="text-[#636366]">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
     </div>
   );
 }

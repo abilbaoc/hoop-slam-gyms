@@ -5,4 +5,8 @@ export interface ClubMember {
   nickname: string;
   email?: string;
   joinedAt: string;
+  level?: number;
+  gamesPlayed?: number;
+  gamesWon?: number;
+  winPercentage?: number;
 }
