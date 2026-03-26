@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 
 const TIME_OPTIONS = ['06:00','07:00','08:00','09:00','10:00','11:00','12:00','13:00',
   '14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00','23:00'];
-const DURATION_OPTIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120];
+const DURATION_OPTIONS = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120];
 
 function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => void }) {
   const [name, setName] = useState(court.name);
