@@ -7,7 +7,7 @@ import Tabs from '../../components/ui/Tabs';
 import CourtStatusBadge from '../../components/shared/CourtStatusBadge';
 import Badge from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
-import { getCourts, updateCourt, getCourtSlots, createCourtSlot, updateCourtSlot, getIncidents, createIncident, updateIncident } from '../../data/api';
+import { getCourts, updateCourt, getCourtSlots, createCourtSlot, updateCourtSlot, getIncidents, createIncident, updateIncident, getReservations } from '../../data/api';
 import type { FirebaseCourtIncident, IncidentType, IncidentPriority } from '../../data/api';
 import { useGym } from '../../contexts/GymContext';
 import type { Court, CourtSlot } from '../../types';
@@ -176,16 +176,36 @@ function buildCourtTimes(open: string, close: string): string[] {
   return times;
 }
 
+interface UserReservation {
+  id: string;
+  startTime: string;
+  endTime: string;
+  playerName: string;
+  status: string;
+}
+
 function SlotsTab({ court }: { court: Court }) {
   const today = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(today);
   const [slots, setSlots] = useState<CourtSlot[]>([]);
+  const [userReservations, setUserReservations] = useState<UserReservation[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const courtTimes = buildCourtTimes(court.opening_time || '09:00', court.closing_time || '21:00');
   const [newStart, setNewStart] = useState(courtTimes[0] || '09:00');
   const [newEnd, setNewEnd] = useState(courtTimes[1] || '09:30');
 
-  const loadSlots = () => getCourtSlots(court.id, selectedDate).then(setSlots);
+  const loadSlots = () => {
+    getCourtSlots(court.id, selectedDate).then(setSlots);
+    getReservations({ courtId: court.id, date: selectedDate }).then(res => {
+      setUserReservations(res.map(r => ({
+        id: r.id,
+        startTime: r.startTime,
+        endTime: r.endTime,
+        playerName: r.playerName,
+        status: r.status,
+      })));
+    });
+  };
   useEffect(() => { loadSlots(); }, [court.id, selectedDate]);
 
   const addDays = (base: string, n: number) => {
@@ -277,28 +297,29 @@ function SlotsTab({ court }: { court: Court }) {
         </div>
       )}
 
-      {/* Reserved slots (by users via app) */}
-      {reservedSlots.length > 0 && (
+      {/* User reservations from Firebase */}
+      {userReservations.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-xs font-medium text-[#636366] uppercase">Reservas de usuarios</h3>
+          <h3 className="text-xs font-medium text-[#636366] uppercase">Reservas de usuarios ({userReservations.length})</h3>
           <Card className="!p-0 overflow-hidden">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-[#2C2C2E]">
-                  {['Inicio', 'Fin', 'Estado'].map(col => (
+                  {['Inicio', 'Fin', 'Jugador', 'Estado'].map(col => (
                     <th key={col} className="px-4 py-3 text-xs font-medium text-[#636366] uppercase">{col}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {reservedSlots.map(slot => (
-                  <tr key={slot.id} className="border-b border-[#2C2C2E] last:border-0">
-                    <td className="px-4 py-3 text-sm text-white">{slot.startTime}</td>
-                    <td className="px-4 py-3 text-sm text-white">{slot.endTime}</td>
+                {userReservations.sort((a, b) => a.startTime.localeCompare(b.startTime)).map(r => (
+                  <tr key={r.id} className="border-b border-[#2C2C2E] last:border-0">
+                    <td className="px-4 py-3 text-sm text-white">{r.startTime}</td>
+                    <td className="px-4 py-3 text-sm text-white">{r.endTime}</td>
+                    <td className="px-4 py-3 text-sm text-white">{r.playerName}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-lg text-xs border ${STATUS_COLORS.reserved}`}>
-                        {STATUS_LABEL.reserved}
-                      </span>
+                      <Badge variant={r.status === 'confirmed' ? 'green' : 'red'}>
+                        {r.status === 'confirmed' ? 'Completada' : 'Cancelada'}
+                      </Badge>
                     </td>
                   </tr>
                 ))}
@@ -309,11 +330,11 @@ function SlotsTab({ court }: { court: Court }) {
       )}
 
       {/* Empty state */}
-      {blockedSlots.length === 0 && reservedSlots.length === 0 && (
+      {blockedSlots.length === 0 && userReservations.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Clock size={40} className="text-[#3C3C3E] mb-3" />
-          <p className="text-white font-medium">Sin bloqueos para este día</p>
-          <p className="text-sm text-[#8E8E93] mt-1">La canasta está completamente libre para reservas de usuarios.</p>
+          <p className="text-white font-medium">Sin actividad para este día</p>
+          <p className="text-sm text-[#8E8E93] mt-1">No hay bloqueos ni reservas de usuarios.</p>
         </div>
       )}
 
