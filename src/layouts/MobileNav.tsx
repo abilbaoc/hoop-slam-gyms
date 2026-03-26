@@ -17,7 +17,7 @@ export default function MobileNav() {
     { to: `${prefix}/courts`, icon: MapPin, label: 'Cestas' },
     { to: `${prefix}/matches`, icon: Trophy, label: 'Partidos' },
     { to: `${prefix}/reservations`, icon: Calendar, label: 'Reservas' },
-    { to: `${prefix}/gestores`, icon: UserCog, label: 'Gestores' },
+    { to: `${prefix}/users`, icon: UserCog, label: 'Usuarios' },
   ];
 
   return (

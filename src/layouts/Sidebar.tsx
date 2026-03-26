@@ -12,12 +12,10 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useGymLayout } from './GymLayout';
-import { usePermissions } from '../hooks/usePermissions';
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { gym, gymId } = useGymLayout();
-  const { canManageUsers } = usePermissions();
   const navigate = useNavigate();
 
   const prefix = `/gym/${gymId}`;
@@ -27,7 +25,7 @@ export default function Sidebar() {
     { to: `${prefix}/courts`, icon: MapPin, label: 'Cestas', show: true },
     { to: `${prefix}/matches`, icon: Trophy, label: 'Partidos', show: true },
     { to: `${prefix}/reservations`, icon: Calendar, label: 'Reservas', show: true },
-    { to: `${prefix}/gestores`, icon: UserCog, label: 'Gestores', show: canManageUsers },
+    { to: `${prefix}/users`, icon: UserCog, label: 'Usuarios', show: true },
     { to: `${prefix}/profile`, icon: Building2, label: 'Perfil Club', show: true },
   ];
 

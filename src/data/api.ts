@@ -452,20 +452,17 @@ export async function getGymById(id: string): Promise<Gym | undefined> {
   return gyms.find(g => g.id === id);
 }
 
+// In-memory cache for gym updates (no gyms collection in Firebase yet)
+const gymOverrides = new Map<string, Partial<Gym>>();
+
 export async function updateGym(id: string, data: Partial<Gym>): Promise<Gym> {
-  if (isSupabaseConfigured && supabase) {
-    const { data: updated, error } = await supabase
-      .from('gyms')
-      .update({ name: data.name, city: data.city, address: data.address })
-      .eq('id', id).select().single();
-    if (error) throw new Error(error.message);
-    return mapSupabaseGym(updated as Record<string, unknown>);
-  }
-  await delay();
-  const idx = gyms.findIndex(g => g.id === id);
-  if (idx === -1) throw new Error('Gym not found');
-  gyms[idx] = { ...gyms[idx], ...data };
-  return gyms[idx];
+  // Get the current gym first
+  const current = await getGymById(id);
+  if (!current) throw new Error('Gym not found');
+  // Merge and cache
+  const merged = { ...current, ...gymOverrides.get(id), ...data };
+  gymOverrides.set(id, merged);
+  return merged;
 }
 
 // ── Notifications ──

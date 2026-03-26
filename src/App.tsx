@@ -67,7 +67,7 @@ function AppRoutes() {
         <Route path="courts/:id" element={<CourtDetailPage />} />
         <Route path="matches" element={<MatchesPage />} />
         <Route path="reservations" element={<ReservationsPage />} />
-        <Route path="gestores" element={<UsersPage />} />
+        <Route path="users" element={<UsersPage />} />
         <Route path="profile" element={<GymProfilePage />} />
         <Route path="maintenance" element={<MaintenancePage />} />
         <Route path="notifications" element={<NotificationsPage />} />
