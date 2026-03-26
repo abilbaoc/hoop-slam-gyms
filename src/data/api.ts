@@ -744,3 +744,68 @@ export async function updateUserRole(userId: string, newRole: 'admin' | 'gestor'
   // mock: no-op
 }
 
+// ── Invite Gestor ──
+
+export interface InviteGestorPayload {
+  email: string;
+  name: string;
+  role: 'admin' | 'gestor' | 'viewer';
+  gymIds: string[];
+  password: string;
+}
+
+export interface InviteGestorResult {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  gymIds: string[];
+}
+
+/**
+ * Calls the `invite-gestor` Edge Function to create a new dashboard user.
+ * The Edge Function uses the service_role key to bypass auth.users restrictions
+ * and sets email_confirm: true so the new user can sign in immediately.
+ *
+ * @throws Error with a human-readable Spanish message on failure.
+ */
+export async function inviteGestor(data: InviteGestorPayload): Promise<InviteGestorResult> {
+  if (!isSupabaseConfigured || !supabase) {
+    // Mock fallback — simulate success so the UI stays functional without Supabase
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return {
+      id: `mock-${Date.now()}`,
+      email: data.email,
+      name: data.name,
+      role: data.role,
+      gymIds: data.gymIds,
+    };
+  }
+
+  const { data: result, error } = await supabase.functions.invoke<{
+    ok?: boolean;
+    message?: string;
+    error?: string;
+    user?: InviteGestorResult;
+  }>('invite-gestor', { body: data });
+
+  if (error) {
+    // supabase-js wraps HTTP errors — extract the message if possible
+    throw new Error(error.message ?? 'Error al invitar gestor');
+  }
+
+  if (!result) {
+    throw new Error('Respuesta vacia del servidor');
+  }
+
+  if (result.error) {
+    throw new Error(result.error);
+  }
+
+  if (!result.user) {
+    throw new Error('El servidor no devolvio los datos del usuario');
+  }
+
+  return result.user;
+}
+

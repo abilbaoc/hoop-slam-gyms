@@ -4,6 +4,25 @@ import { ROLE_PERMISSIONS } from '../types/auth';
 import { users as mockUsers } from '../data/mock/users';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
+// ── Allowed-email whitelist ────────────────────────────────────────────────
+// Seeded with the founding admin. Additional emails are loaded from Supabase
+// profiles on init (get_allowed_emails RPC) so newly invited gestores can
+// sign in without a code deploy.
+// The Set is module-level so addAllowedEmail() is callable from any component.
+const allowedEmailsSet = new Set<string>(['laieta@hoopslam.net']);
+
+/** Add an email to the in-memory whitelist (call after a successful invite). */
+export function addAllowedEmail(email: string): void {
+  allowedEmailsSet.add(email.toLowerCase().trim());
+}
+
+/** Returns true if the given email is currently in the whitelist. */
+export function isEmailAllowed(email: string): boolean {
+  return allowedEmailsSet.has(email.toLowerCase().trim());
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+
 interface AuthContextValue {
   currentUser: AppUser | null;
   isAuthenticated: boolean;
@@ -140,17 +159,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
-          const parsed = JSON.parse(saved);
+          const parsed = JSON.parse(saved) as AppUser;
           setCurrentUser(parsed);
           profileCache.current.set(parsed.id, parsed);
         }
       } catch { /* ignore */ }
 
+      // Load allowed emails from Supabase so invited gestores can sign in
+      // without a code change. Failures are non-fatal — the seed email is
+      // always present in allowedEmailsSet.
+      supabase.rpc('get_allowed_emails').then(({ data, error }) => {
+        if (!error && Array.isArray(data)) {
+          (data as string[]).forEach((email) => allowedEmailsSet.add(email));
+        } else if (error) {
+          console.warn('[Auth] get_allowed_emails RPC failed (run migration 006):', error.message);
+        }
+      });
+
       // Then verify with Supabase
       supabase.auth.getSession().then(async ({ data: { session } }) => {
         if (session?.user) {
           // If the session email is not whitelisted, sign out silently
-          if (!ALLOWED_EMAILS.includes(session.user.email?.toLowerCase().trim() ?? '')) {
+          if (!isEmailAllowed(session.user.email ?? '')) {
             await supabase!.auth.signOut();
             setCurrentUser(null);
             localStorage.removeItem(STORAGE_KEY);
@@ -210,7 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Mock mode: restore from localStorage
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) setCurrentUser(JSON.parse(saved));
+        if (saved) setCurrentUser(JSON.parse(saved) as AppUser);
       } catch {
         localStorage.removeItem(STORAGE_KEY);
       }
@@ -220,12 +250,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Sign In ──
   // Only whitelisted emails can access the dashboard
-  const ALLOWED_EMAILS = ['laieta@hoopslam.net'];
-
   const signIn = useCallback(async (email: string, password: string): Promise<{ error?: string }> => {
     if (!supabase) return { error: 'Supabase no configurado' };
 
-    if (!ALLOWED_EMAILS.includes(email.toLowerCase().trim())) {
+    if (!isEmailAllowed(email)) {
       return { error: 'Acceso no autorizado' };
     }
 
