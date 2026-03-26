@@ -10,7 +10,7 @@ import PendingPage from './pages/Auth/PendingPage';
 import GymProfilePage from './pages/GymProfile/GymProfilePage';
 import UsersPage from './pages/Users/UsersPage';
 import ReservationsPage from './pages/Reservations/ReservationsPage';
-import MatchesPage from './pages/Matches/MatchesPage';
+import GestoresPage from './pages/Gestores/GestoresPage';
 import MaintenancePage from './pages/Maintenance/MaintenancePage';
 import OnboardingPage from './pages/Onboarding/OnboardingPage';
 import PrivacyPolicyPage from './pages/Privacy/PrivacyPolicyPage';
@@ -65,9 +65,9 @@ function AppRoutes() {
         <Route path="dashboard" element={<OverviewPage />} />
         <Route path="courts" element={<CourtsPage />} />
         <Route path="courts/:id" element={<CourtDetailPage />} />
-        <Route path="matches" element={<MatchesPage />} />
         <Route path="reservations" element={<ReservationsPage />} />
         <Route path="users" element={<UsersPage />} />
+        <Route path="gestores" element={<GestoresPage />} />
         <Route path="profile" element={<GymProfilePage />} />
         <Route path="maintenance" element={<MaintenancePage />} />
         <Route path="notifications" element={<NotificationsPage />} />

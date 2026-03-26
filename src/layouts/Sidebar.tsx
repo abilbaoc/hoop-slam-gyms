@@ -6,9 +6,9 @@ import {
   ChevronRight,
   Calendar,
   Building2,
-  UserCog,
   ArrowLeft,
-  Trophy,
+  Users,
+  Shield,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useGymLayout } from './GymLayout';
@@ -23,9 +23,9 @@ export default function Sidebar() {
   const navItems = [
     { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Dashboard', show: true },
     { to: `${prefix}/courts`, icon: MapPin, label: 'Cestas', show: true },
-    { to: `${prefix}/matches`, icon: Trophy, label: 'Partidos', show: true },
     { to: `${prefix}/reservations`, icon: Calendar, label: 'Reservas', show: true },
-    { to: `${prefix}/users`, icon: UserCog, label: 'Usuarios', show: true },
+    { to: `${prefix}/users`, icon: Users, label: 'Usuarios', show: true },
+    { to: `${prefix}/gestores`, icon: Shield, label: 'Gestores', show: true },
     { to: `${prefix}/profile`, icon: Building2, label: 'Perfil Club', show: true },
   ];
 

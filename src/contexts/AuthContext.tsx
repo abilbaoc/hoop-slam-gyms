@@ -151,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           // If the session email is not whitelisted, sign out silently
           if (!ALLOWED_EMAILS.includes(session.user.email?.toLowerCase().trim() ?? '')) {
-            await supabase.auth.signOut();
+            await supabase!.auth.signOut();
             setCurrentUser(null);
             localStorage.removeItem(STORAGE_KEY);
             profileCache.current.clear();
