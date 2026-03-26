@@ -770,36 +770,16 @@ export interface InviteGestorResult {
  * @throws Error with a human-readable Spanish message on failure.
  */
 export async function inviteGestor(data: InviteGestorPayload): Promise<InviteGestorResult> {
-  if (!isSupabaseConfigured || !supabase) {
-    // Mock fallback — simulate success so the UI stays functional without Supabase
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    return {
-      id: `mock-${Date.now()}`,
-      email: data.email,
-      name: data.name,
-      role: data.role,
-      gymIds: data.gymIds,
-    };
-  }
+  const res = await fetch('/api/invite-gestor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
 
-  const { data: result, error } = await supabase.functions.invoke<{
-    ok?: boolean;
-    message?: string;
-    error?: string;
-    user?: InviteGestorResult;
-  }>('invite-gestor', { body: data });
+  const result = await res.json();
 
-  if (error) {
-    // supabase-js wraps HTTP errors — extract the message if possible
-    throw new Error(error.message ?? 'Error al invitar gestor');
-  }
-
-  if (!result) {
-    throw new Error('Respuesta vacia del servidor');
-  }
-
-  if (result.error) {
-    throw new Error(result.error);
+  if (!res.ok || result.error) {
+    throw new Error(result.error ?? 'Error al invitar gestor');
   }
 
   if (!result.user) {
