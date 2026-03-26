@@ -147,13 +147,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch { /* ignore */ }
 
       // Then verify with Supabase
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
         if (session?.user) {
+          // If the session email is not whitelisted, sign out silently
+          if (!ALLOWED_EMAILS.includes(session.user.email?.toLowerCase().trim() ?? '')) {
+            await supabase.auth.signOut();
+            setCurrentUser(null);
+            localStorage.removeItem(STORAGE_KEY);
+            profileCache.current.clear();
+            setIsLoading(false);
+            return;
+          }
           fetchProfile(session.user.id, session.user.email ?? '').then((user) => {
             if (user) {
               setCurrentUser(user);
             } else {
-              // fetchProfile returned null → signed out, clear state
               setCurrentUser(null);
               localStorage.removeItem(STORAGE_KEY);
               profileCache.current.clear();
@@ -161,7 +169,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsLoading(false);
           });
         } else {
-          // No active session — clear cached user
           setCurrentUser(null);
           localStorage.removeItem(STORAGE_KEY);
           profileCache.current.clear();
