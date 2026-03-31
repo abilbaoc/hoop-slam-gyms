@@ -11,6 +11,7 @@ import {
 import Card from '../../components/ui/Card';
 import type { Match } from '../../types';
 import { chartColors } from '../../theme/tokens';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface Props {
   matches: Match[];
@@ -18,6 +19,14 @@ interface Props {
 }
 
 export default function MatchesPerDayChart({ matches, days = 30 }: Props) {
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
+  const axisColor  = isLight ? '#6E6E73' : '#636366';
+  const gridColor  = isLight ? '#D1D1D6' : '#2C2C2E';
+  const tooltipBg  = isLight ? '#FFFFFF' : '#1C1C1E';
+  const tooltipBorder = isLight ? '#D1D1D6' : '#2C2C2E';
+  const tooltipText   = isLight ? '#1C1C1E' : '#FFFFFF';
+
   const data = useMemo(() => {
     const result: { date: string; partidos: number }[] = [];
     for (let i = days - 1; i >= 0; i--) {
@@ -49,10 +58,10 @@ export default function MatchesPerDayChart({ matches, days = 30 }: Props) {
                   <stop offset="95%" stopColor={chartColors[0]} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2C2C2E" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
               <XAxis
                 dataKey="date"
-                stroke="#636366"
+                stroke={axisColor}
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
@@ -63,7 +72,7 @@ export default function MatchesPerDayChart({ matches, days = 30 }: Props) {
                 interval="preserveStartEnd"
               />
               <YAxis
-                stroke="#636366"
+                stroke={axisColor}
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
@@ -71,10 +80,10 @@ export default function MatchesPerDayChart({ matches, days = 30 }: Props) {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#1C1C1E',
-                  border: '1px solid #2C2C2E',
+                  backgroundColor: tooltipBg,
+                  border: `1px solid ${tooltipBorder}`,
                   borderRadius: '12px',
-                  color: '#fff',
+                  color: tooltipText,
                   fontSize: '13px',
                 }}
                 labelFormatter={(v) => {

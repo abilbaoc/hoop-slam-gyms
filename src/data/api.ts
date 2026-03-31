@@ -789,3 +789,23 @@ export async function inviteGestor(data: InviteGestorPayload): Promise<InviteGes
   return result.user;
 }
 
+export async function deleteGestor(userId: string): Promise<void> {
+  const res = await fetch('/api/delete-gestor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId }),
+  });
+  const result = await res.json();
+  if (!res.ok || result.error) throw new Error(result.error ?? 'Error al eliminar gestor');
+}
+
+export async function updateGestorRole(userId: string, role: string, gymIds?: string[]): Promise<void> {
+  const res = await fetch('/api/update-gestor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, role, gymIds }),
+  });
+  const result = await res.json();
+  if (!res.ok || result.error) throw new Error(result.error ?? 'Error al actualizar gestor');
+}
+

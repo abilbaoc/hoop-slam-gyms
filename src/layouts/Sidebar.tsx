@@ -12,11 +12,14 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useGymLayout } from './GymLayout';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { gym, gymId } = useGymLayout();
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
 
   const prefix = `/gym/${gymId}`;
 
@@ -44,7 +47,7 @@ export default function Sidebar() {
           <img
             src="/logo-hoop.png"
             alt="Hoop"
-            className={`invert brightness-200 transition-all duration-300 ${collapsed ? 'h-10 w-10 object-contain' : 'h-11'}`}
+            className={`transition-all duration-300 ${isLight ? '' : 'invert brightness-200'} ${collapsed ? 'h-10 w-10 object-contain' : 'h-11'}`}
           />
         </button>
         {!collapsed && (

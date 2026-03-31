@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { getClubMembers, getReservations, getMatches } from '../../data/api';
 import { useGym } from '../../contexts/GymContext';
+import { useAuth } from '../../contexts/AuthContext';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import type { ClubMember } from '../../types/club_member';
@@ -15,6 +16,8 @@ interface UserActivity {
 
 export default function UsersPage() {
   const { currentGym } = useGym();
+  const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'admin';
   const [activities, setActivities] = useState<UserActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -104,18 +107,18 @@ export default function UsersPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="text-sm text-white font-medium">{member.nickname}</span>
-                    {member.level != null && (
+                    {isAdmin && member.level != null && (
                       <span className="text-xs text-[#636366] ml-2">Nivel {member.level.toFixed(1)}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-3">
-                    {matches.length > 0 && (
+                    {isAdmin && matches.length > 0 && (
                       <Badge variant="green">{matches.length} partido{matches.length !== 1 ? 's' : ''}</Badge>
                     )}
-                    {reservations.length > 0 && (
+                    {isAdmin && reservations.length > 0 && (
                       <Badge variant="blue">{reservations.length} reserva{reservations.length !== 1 ? 's' : ''}</Badge>
                     )}
-                    {totalActivity === 0 && (
+                    {isAdmin && totalActivity === 0 && (
                       <span className="text-xs text-[#636366]">Sin actividad</span>
                     )}
                     {isExpanded ? <ChevronUp size={16} className="text-[#636366]" /> : <ChevronDown size={16} className="text-[#636366]" />}
@@ -125,65 +128,84 @@ export default function UsersPage() {
                 {/* Expanded detail */}
                 {isExpanded && (
                   <div className="border-t border-[#2C2C2E] px-4 py-3 bg-[#0A0A0F] space-y-3">
-                    {/* Stats summary */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div>
-                        <p className="text-[10px] text-[#636366] uppercase">Partidos</p>
-                        <p className="text-lg font-bold text-white">{matches.length}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-[#636366] uppercase">Reservas</p>
-                        <p className="text-lg font-bold text-white">{confirmed}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-[#636366] uppercase">Canceladas</p>
-                        <p className="text-lg font-bold text-white">{cancelled}</p>
-                      </div>
-                      {member.winPercentage != null && (
-                        <div>
-                          <p className="text-[10px] text-[#636366] uppercase">% Victorias</p>
-                          <p className="text-lg font-bold text-white">{Math.round(member.winPercentage * 100)}%</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Recent reservations */}
-                    {reservations.length > 0 && (
-                      <div>
-                        <p className="text-xs text-[#636366] uppercase mb-2">Ultimas reservas</p>
-                        <div className="space-y-1">
-                          {reservations.slice(0, 5).map(r => (
-                            <div key={r.id} className="flex items-center justify-between text-xs py-1">
-                              <span className="text-[#8E8E93]">{r.date} {r.startTime}-{r.endTime}</span>
-                              <Badge variant={r.status === 'confirmed' ? 'green' : 'gray'} size="sm">
-                                {r.status === 'confirmed' ? 'Completada' : 'Cancelada'}
-                              </Badge>
+                    {isAdmin ? (
+                      <>
+                        {/* Stats summary — admin only */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div>
+                            <p className="text-[10px] text-[#636366] uppercase">Partidos</p>
+                            <p className="text-lg font-bold text-white">{matches.length}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-[#636366] uppercase">Reservas</p>
+                            <p className="text-lg font-bold text-white">{confirmed}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-[#636366] uppercase">Canceladas</p>
+                            <p className="text-lg font-bold text-white">{cancelled}</p>
+                          </div>
+                          {member.winPercentage != null && (
+                            <div>
+                              <p className="text-[10px] text-[#636366] uppercase">% Victorias</p>
+                              <p className="text-lg font-bold text-white">{Math.round(member.winPercentage * 100)}%</p>
                             </div>
-                          ))}
+                          )}
                         </div>
-                      </div>
-                    )}
 
-                    {/* Recent matches */}
-                    {matches.length > 0 && (
-                      <div>
-                        <p className="text-xs text-[#636366] uppercase mb-2">Ultimos partidos</p>
-                        <div className="space-y-1">
-                          {matches.slice(0, 5).map(m => (
-                            <div key={m.id} className="flex items-center justify-between text-xs py-1">
-                              <span className="text-[#8E8E93]">
-                                {new Date(m.startedAt).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
-                                {' '}{m.courtName && `en ${m.courtName}`}
-                              </span>
-                              <span className="text-white">{m.format} · {m.duration} min</span>
+                        {/* Recent reservations — admin */}
+                        {reservations.length > 0 && (
+                          <div>
+                            <p className="text-xs text-[#636366] uppercase mb-2">Ultimas reservas</p>
+                            <div className="space-y-1">
+                              {reservations.slice(0, 5).map(r => (
+                                <div key={r.id} className="flex items-center justify-between text-xs py-1">
+                                  <span className="text-[#8E8E93]">{r.date} {r.startTime}-{r.endTime}</span>
+                                  <Badge variant={r.status === 'confirmed' ? 'green' : 'gray'} size="sm">
+                                    {r.status === 'confirmed' ? 'Completada' : 'Cancelada'}
+                                  </Badge>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                          </div>
+                        )}
 
-                    {totalActivity === 0 && (
-                      <p className="text-xs text-[#636366]">Este jugador no tiene actividad registrada en tus cestas.</p>
+                        {/* Recent matches — admin */}
+                        {matches.length > 0 && (
+                          <div>
+                            <p className="text-xs text-[#636366] uppercase mb-2">Ultimos partidos</p>
+                            <div className="space-y-1">
+                              {matches.slice(0, 5).map(m => (
+                                <div key={m.id} className="flex items-center justify-between text-xs py-1">
+                                  <span className="text-[#8E8E93]">
+                                    {new Date(m.startedAt).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                                    {' '}{m.courtName && `en ${m.courtName}`}
+                                  </span>
+                                  <span className="text-white">{m.format} · {m.duration} min</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {totalActivity === 0 && (
+                          <p className="text-xs text-[#636366]">Este jugador no tiene actividad registrada en tus cestas.</p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {/* Gestor: only reservation times */}
+                        {reservations.length > 0 ? (
+                          <div className="space-y-1">
+                            {reservations.slice(0, 5).map(r => (
+                              <div key={r.id} className="text-xs py-1">
+                                <span className="text-[#8E8E93]">{r.date} {r.startTime}-{r.endTime}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-[#636366]">Sin reservas en tus canastas.</p>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

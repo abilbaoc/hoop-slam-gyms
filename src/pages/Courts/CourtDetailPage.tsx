@@ -10,6 +10,7 @@ import { Modal } from '../../components/ui/Modal';
 import { getCourts, updateCourt, getCourtSlots, createCourtSlot, updateCourtSlot, getIncidents, createIncident, updateIncident, getReservations } from '../../data/api';
 import type { FirebaseCourtIncident, IncidentType, IncidentPriority } from '../../data/api';
 import { useGym } from '../../contexts/GymContext';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Court, CourtSlot } from '../../types';
 import { toast } from 'sonner';
 
@@ -20,6 +21,8 @@ const TIME_OPTIONS = ['06:00','07:00','08:00','09:00','10:00','11:00','12:00','1
 const DURATION_OPTIONS = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120];
 
 function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => void }) {
+  const { currentUser } = useAuth();
+  const isGestor = currentUser?.role === 'gestor';
   const [name, setName] = useState(court.name);
   const [address, setAddress] = useState(court.address);
   const [openingTime, setOpeningTime] = useState(court.opening_time);
@@ -29,15 +32,16 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
   const [saving, setSaving] = useState(false);
 
   const handleToggleActive = async () => {
-    const updated = await updateCourt(court.id, { is_active: !court.is_active });
-    onSaved(updated);
-    toast.success(updated.is_active ? 'Canasta activada' : 'Canasta desactivada');
-  };
-
-  const handleToggleVisible = async () => {
-    const updated = await updateCourt(court.id, { is_visible: !court.is_visible });
-    onSaved(updated);
-    toast.success(updated.is_visible ? 'Visible en la app' : 'Ocultada de la app');
+    const newActive = !court.is_active;
+    const newStatus = newActive ? 'online' : 'offline' as const;
+    onSaved({ ...court, is_active: newActive, status: newStatus });
+    try {
+      await updateCourt(court.id, { is_active: newActive });
+      toast.success(newActive ? 'Canasta activada' : 'Canasta desactivada');
+    } catch {
+      onSaved(court);
+      toast.error('Error al actualizar el estado');
+    }
   };
 
   const handleSave = async () => {
@@ -71,15 +75,6 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
               className={`w-12 h-7 rounded-full transition-colors duration-200 relative flex-shrink-0 ${court.is_active ? 'bg-[#7BFF00]' : 'bg-[#3C3C3E]'}`}
             >
               <span className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${court.is_active ? 'translate-x-5' : 'translate-x-0'}`} />
-            </button>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-white">Visible en la app</span>
-            <button
-              onClick={handleToggleVisible}
-              className={`w-12 h-7 rounded-full transition-colors duration-200 relative flex-shrink-0 ${court.is_visible ? 'bg-[#7BFF00]' : 'bg-[#3C3C3E]'}`}
-            >
-              <span className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${court.is_visible ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
         </div>
@@ -121,25 +116,27 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
         <p className="text-xs text-[#636366] mt-2">El horario define la ventana disponible para crear slots.</p>
       </Card>
 
-      {/* Duración */}
-      <Card>
-        <h3 className="text-xs font-medium text-[#636366] uppercase mb-4">Configuración de partidos</h3>
-        <div className="flex items-start gap-6">
-          <div>
-            <label className="text-xs text-[#8E8E93] mb-1 block">Duración partido</label>
-            <select className={selectClass} value={matchDuration} onChange={e => setMatchDuration(Number(e.target.value))}>
-              {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d} min</option>)}
-            </select>
+      {/* Duración — solo gestor */}
+      {isGestor && (
+        <Card>
+          <h3 className="text-xs font-medium text-[#636366] uppercase mb-4">Configuración de partidos</h3>
+          <div className="flex items-start gap-6">
+            <div>
+              <label className="text-xs text-[#8E8E93] mb-1 block">Duración partido</label>
+              <select className={selectClass} value={matchDuration} onChange={e => setMatchDuration(Number(e.target.value))}>
+                {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d} min</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-[#8E8E93] mb-1 block">Duración slot</label>
+              <select className={selectClass} value={slotDuration} onChange={e => setSlotDuration(Number(e.target.value))}>
+                {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d} min</option>)}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-[#8E8E93] mb-1 block">Duración slot</label>
-            <select className={selectClass} value={slotDuration} onChange={e => setSlotDuration(Number(e.target.value))}>
-              {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d} min</option>)}
-            </select>
-          </div>
-        </div>
-        <p className="text-xs text-[#636366] mt-2">La duración del partido debe ser ≤ duración del slot.</p>
-      </Card>
+          <p className="text-xs text-[#636366] mt-2">La duración del partido debe ser ≤ duración del slot.</p>
+        </Card>
+      )}
 
       <div className="flex justify-end gap-3">
         <Button variant="secondary" onClick={() => { setName(court.name); setAddress(court.address); }}>Cancelar</Button>
@@ -555,7 +552,6 @@ export default function CourtDetailPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-white">{court.name}</h1>
             <CourtStatusBadge status={court.status} />
-            {!court.is_active && <Badge variant="gray">Inactiva</Badge>}
           </div>
           <p className="text-sm text-[#8E8E93]">{court.address || court.location}</p>
         </div>

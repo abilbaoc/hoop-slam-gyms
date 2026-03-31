@@ -79,6 +79,24 @@ html.light input,
 html.light select,
 html.light textarea             { color: #1C1C1E; }
 
+/* Placeholder */
+html.light input::placeholder,
+html.light textarea::placeholder { color: #8E8E93 !important; }
+
+/* Hover: backgrounds */
+html.light .hover\:bg-\[\#1C1C1E\]:hover   { background-color: #E5E5EA !important; }
+html.light .hover\:bg-\[\#2C2C2E\]:hover   { background-color: #D1D1D6 !important; }
+html.light .hover\:bg-\[\#3C3C3E\]:hover   { background-color: #C7C7CC !important; }
+html.light .hover\:bg-\[\#1C1C1E\]\/60:hover { background-color: rgba(229,229,234,0.6) !important; }
+html.light .hover\:bg-\[\#2C2C2E\]\/30:hover { background-color: rgba(209,209,214,0.3) !important; }
+
+/* Hover: text */
+html.light .hover\:text-white:hover        { color: #1C1C1E !important; }
+html.light .hover\:text-\[\#8E8E93\]:hover { color: #48484A !important; }
+
+/* Fix: #636366 queda muy claro en modo día, subir contraste */
+html.light .text-\[\#636366\]             { color: #6E6E73 !important; }
+
 /* Scrollbar */
 html.light * {
   scrollbar-color: #C7C7CC #F2F2F7;

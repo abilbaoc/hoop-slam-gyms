@@ -52,8 +52,10 @@ function toIso(value: unknown): string {
 /** Map Firestore court state to our CourtStatus. */
 function mapCourtStatus(state: string | undefined, online?: boolean): 'online' | 'offline' | 'maintenance' {
   if (state === 'maintenance') return 'maintenance';
-  if (state === 'active' || state === 'online') return online !== false ? 'online' : 'offline';
-  return 'offline';
+  if (state === 'inactive') return 'offline';
+  if (state === 'active' || state === 'online') return 'online';
+  // No explicit state — fall back to `online` field (firmware default)
+  return online !== false ? 'online' : 'offline';
 }
 
 /** Map Firestore reservation state to our ReservationStatus. */
@@ -370,7 +372,7 @@ export async function fbUpdateCourt(courtId: string, data: Partial<Court>): Prom
   if (data.is_active !== undefined) {
     patch.state = data.is_active ? 'active' : 'inactive';
   }
-  if (data.is_visible !== undefined) patch.online = data.is_visible;
+  // is_visible removed from UI — no longer written to Firestore
   if (data.match_duration_minutes !== undefined) {
     patch['config.gameMaxDuration'] = data.match_duration_minutes * 60; // Firestore stores seconds
   }
