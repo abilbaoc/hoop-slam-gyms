@@ -151,12 +151,6 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
 // Las franjas sin bloqueo quedan libres para reservas individuales desde la app.
 // "Crear slot" = bloquear una franja para uso exclusivo del gimnasio.
 
-const STATUS_COLORS: Record<CourtSlot['status'], string> = {
-  available: 'bg-[#7BFF00]/20 text-[#7BFF00] border-[#7BFF00]/30',
-  reserved: 'bg-[#0A84FF]/20 text-[#0A84FF] border-[#0A84FF]/30',
-  blocked: 'bg-[#FF9F0A]/20 text-[#FF9F0A] border-[#FF9F0A]/30',
-};
-const STATUS_LABEL: Record<CourtSlot['status'], string> = { available: 'Libre', reserved: 'Reservado por usuario', blocked: 'Bloqueado por el club' };
 
 /** Generate time options within court operating hours, every 30 min. */
 function buildCourtTimes(open: string, close: string): string[] {
@@ -232,7 +226,6 @@ function SlotsTab({ court }: { court: Court }) {
   const selectClass = 'bg-[#2C2C2E] text-white text-sm rounded-xl px-3 py-2 border border-[#2C2C2E] outline-none focus:border-[#7BFF00]';
 
   const blockedSlots = slots.filter(s => s.status === 'blocked').sort((a, b) => a.startTime.localeCompare(b.startTime));
-  const reservedSlots = slots.filter(s => s.status === 'reserved').sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   return (
     <div className="space-y-4">
