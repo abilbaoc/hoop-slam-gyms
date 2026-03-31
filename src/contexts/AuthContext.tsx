@@ -179,15 +179,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Then verify with Supabase
       supabase.auth.getSession().then(async ({ data: { session } }) => {
         if (session?.user) {
-          // If the session email is not whitelisted, sign out silently
-          if (!isEmailAllowed(session.user.email ?? '')) {
-            await supabase!.auth.signOut();
-            setCurrentUser(null);
-            localStorage.removeItem(STORAGE_KEY);
-            profileCache.current.clear();
-            setIsLoading(false);
-            return;
-          }
           fetchProfile(session.user.id, session.user.email ?? '').then((user) => {
             if (user) {
               setCurrentUser(user);
@@ -252,10 +243,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Only whitelisted emails can access the dashboard
   const signIn = useCallback(async (email: string, password: string): Promise<{ error?: string }> => {
     if (!supabase) return { error: 'Supabase no configurado' };
-
-    if (!isEmailAllowed(email)) {
-      return { error: 'Acceso no autorizado' };
-    }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
