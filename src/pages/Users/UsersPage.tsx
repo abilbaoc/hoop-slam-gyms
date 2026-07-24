@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Users, ChevronDown, ChevronUp } from 'lucide-react';
+import LoadErrorState from '../../components/shared/LoadErrorState';
 import { getClubMembers, getReservations, getMatches } from '../../data/api';
-import { useGym } from '../../contexts/GymContext';
+import { useGymLayout } from '../../layouts/GymLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
@@ -15,16 +16,18 @@ interface UserActivity {
 }
 
 export default function UsersPage() {
-  const { currentGym } = useGym();
+  const { gym: currentGym } = useGymLayout();
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
   const [activities, setActivities] = useState<UserActivity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [search, setSearch] = useState('');
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     setLoading(true);
+    setError(false);
     const gymId = currentGym?.id ?? '';
     Promise.all([
       getClubMembers(gymId),
@@ -48,9 +51,13 @@ export default function UsersPage() {
       );
 
       setActivities(userActivities);
-      setLoading(false);
-    });
+    }).catch((err) => {
+      console.error('[Users] load:', err);
+      setError(true);
+    }).finally(() => setLoading(false));
   }, [currentGym?.id]);
+
+  useEffect(() => { load(); }, [load]);
 
   const filtered = search
     ? activities.filter(a => a.member.nickname.toLowerCase().includes(search.toLowerCase()))
@@ -78,6 +85,8 @@ export default function UsersPage() {
         <div className="flex items-center justify-center py-16">
           <div className="w-6 h-6 border-2 border-[#7BFF00] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : error ? (
+        <LoadErrorState onRetry={load} />
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Users size={40} className="text-[#3C3C3E] mb-3" />

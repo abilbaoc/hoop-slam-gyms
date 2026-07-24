@@ -4,31 +4,11 @@ import { ROLE_PERMISSIONS } from '../types/auth';
 import { users as mockUsers } from '../data/mock/users';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
-// ── Allowed-email whitelist ────────────────────────────────────────────────
-// Seeded with the founding admin. Additional emails are loaded from Supabase
-// profiles on init (get_allowed_emails RPC) so newly invited gestores can
-// sign in without a code deploy.
-// The Set is module-level so addAllowedEmail() is callable from any component.
-const allowedEmailsSet = new Set<string>(['laieta@hoopslam.net']);
-
-/** Add an email to the in-memory whitelist (call after a successful invite). */
-export function addAllowedEmail(email: string): void {
-  allowedEmailsSet.add(email.toLowerCase().trim());
-}
-
-/** Returns true if the given email is currently in the whitelist. */
-export function isEmailAllowed(email: string): boolean {
-  return allowedEmailsSet.has(email.toLowerCase().trim());
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-
 interface AuthContextValue {
   currentUser: AppUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
-  signUp: (email: string, password: string, name: string, role?: 'gestor' | 'staff') => Promise<{ error?: string; needsOnboarding?: boolean; needsEmailConfirmation?: boolean }>;
   signOut: () => Promise<void>;
   hasPermission: (p: Permission) => boolean;
   canAccessGym: (gymId: string) => boolean;
@@ -41,7 +21,6 @@ const AuthContext = createContext<AuthContextValue>({
   isAuthenticated: false,
   isLoading: true,
   signIn: async () => ({ error: 'Not initialized' }),
-  signUp: async () => ({ error: 'Not initialized' }),
   signOut: async () => {},
   hasPermission: () => false,
   canAccessGym: () => false,
@@ -136,22 +115,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  function buildDefaultUser(userId: string, email: string): AppUser {
-    const user: AppUser = {
-      id: userId,
-      name: email.split('@')[0],
-      email,
-      role: 'gestor',
-      gymIds: [],
-      permissions: ROLE_PERMISSIONS.gestor,
-      lastActiveAt: new Date().toISOString(),
-      avatarInitials: getInitials(email),
-    };
-    profileCache.current.set(userId, user);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    return user;
-  }
-
   // ── Initialize ──
   useEffect(() => {
     if (isSupabaseConfigured && supabase) {
@@ -164,17 +127,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           profileCache.current.set(parsed.id, parsed);
         }
       } catch { /* ignore */ }
-
-      // Load allowed emails from Supabase so invited gestores can sign in
-      // without a code change. Failures are non-fatal — the seed email is
-      // always present in allowedEmailsSet.
-      supabase.rpc('get_allowed_emails').then(({ data, error }) => {
-        if (!error && Array.isArray(data)) {
-          (data as string[]).forEach((email) => allowedEmailsSet.add(email));
-        } else if (error) {
-          console.warn('[Auth] get_allowed_emails RPC failed (run migration 006):', error.message);
-        }
-      });
 
       // Then verify with Supabase
       supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -253,45 +205,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {};
   }, []);
 
-  // ── Sign Up ──
-  const signUp = useCallback(async (email: string, password: string, name: string, role: 'gestor' | 'staff' = 'gestor'): Promise<{ error?: string; needsOnboarding?: boolean; needsEmailConfirmation?: boolean }> => {
-    if (!supabase) return { error: 'Supabase no configurado' };
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { name, role } },
-    });
-
-    if (error) {
-      if (error.message.includes('already registered')) return { error: 'Este email ya esta registrado' };
-      if (error.message.includes('Signups not allowed')) return { error: 'El registro esta deshabilitado. Activa "Enable Sign Up" en Supabase.' };
-      return { error: `Error: ${error.message}` };
-    }
-
-    if (data.user) {
-      try {
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          name,
-          role,
-          gym_ids: [],
-        });
-      } catch {
-        // Trigger will handle it
-      }
-
-      const user = buildDefaultUser(data.user.id, email);
-      user.name = name;
-      user.role = role;
-      user.avatarInitials = getInitials(name);
-      user.permissions = ROLE_PERMISSIONS[role];
-      setCurrentUser(user);
-    }
-
-    return { needsOnboarding: role === 'gestor', needsEmailConfirmation: !data.session };
-  }, []);
-
   // ── Sign Out ──
   const handleSignOut = useCallback(async () => {
     isSigningOut.current = true;
@@ -348,9 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (gymId: string): boolean => {
       if (!currentUser) return false;
       if (currentUser.role === 'admin') return true;
-      // If no gymIds assigned, allow access (pre-club-segmentation phase)
-      if (!currentUser.gymIds || currentUser.gymIds.length === 0) return true;
-      return currentUser.gymIds.includes(gymId);
+      return currentUser.gymIds?.includes(gymId) ?? false;
     },
     [currentUser],
   );
@@ -373,7 +284,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!currentUser,
         isLoading,
         signIn,
-        signUp,
         signOut: handleSignOut,
         hasPermission,
         canAccessGym,

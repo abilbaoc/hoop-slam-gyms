@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireAdmin, isAuthFailure } from './_auth';
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? 'https://afhxzrnylpvjgtlewflq.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
@@ -12,8 +13,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY not configured' });
   }
 
+  const caller = await requireAdmin(req);
+  if (isAuthFailure(caller)) {
+    return res.status(caller.status).json({ error: caller.error });
+  }
+
   const { userId, role, gymIds } = req.body ?? {};
   if (!userId) return res.status(400).json({ error: 'userId es obligatorio' });
+  if (role !== undefined && !['admin', 'gestor', 'staff'].includes(role)) {
+    return res.status(400).json({ error: 'Rol invalido' });
+  }
 
   const patch: Record<string, unknown> = {};
   if (role !== undefined) patch.role = role;

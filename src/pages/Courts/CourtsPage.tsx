@@ -8,7 +8,8 @@ import { Input } from '../../components/ui/Input';
 import CourtStatusBadge from '../../components/shared/CourtStatusBadge';
 import { getCourts, getCourtOccupancyData, createCourt, updateCourt, deleteCourt } from '../../data/api';
 import type { Court, CourtOccupancy, CourtStatus } from '../../types';
-import { useGym } from '../../contexts/GymContext';
+import { useGymLayout } from '../../layouts/GymLayout';
+import { usePermissions } from '../../hooks/usePermissions';
 import { toast } from 'sonner';
 
 export default function CourtsPage() {
@@ -21,7 +22,8 @@ export default function CourtsPage() {
   const [formLocation, setFormLocation] = useState('');
   const [formStatus, setFormStatus] = useState<CourtStatus>('online');
   const navigate = useNavigate();
-  const { currentGym } = useGym();
+  const { gym: currentGym } = useGymLayout();
+  const { canManageCourts } = usePermissions();
 
   const loadData = () => {
     getCourts(currentGym?.id).then(setCourts);
@@ -51,47 +53,62 @@ export default function CourtsPage() {
   };
 
   const handleCreate = async () => {
-    if (!formName.trim()) return;
-    await createCourt({
-      gymId: currentGym?.id || 'gym-001',
-      name: formName,
-      location: formLocation || currentGym?.city || 'Barcelona',
-      status: formStatus,
-      installedDate: new Date().toISOString().split('T')[0],
-      firmwareVersion: 'v2.1.3',
-      lastHeartbeat: new Date().toISOString(),
-      sensorStatus: 'ok',
-      is_active: true,
-      address: formLocation || '',
-      opening_time: '09:00',
-      closing_time: '21:00',
-      is_visible: true,
-      match_duration_minutes: 20,
-      slot_duration_minutes: 30,
-    });
-    setShowCreate(false);
-    toast.success('Canasta creada');
-    loadData();
+    if (!canManageCourts || !formName.trim()) return;
+    try {
+      await createCourt({
+        gymId: currentGym?.id || 'gym-001',
+        name: formName,
+        location: formLocation || currentGym?.city || 'Barcelona',
+        status: formStatus,
+        installedDate: new Date().toISOString().split('T')[0],
+        firmwareVersion: 'v2.1.3',
+        lastHeartbeat: new Date().toISOString(),
+        sensorStatus: 'ok',
+        is_active: true,
+        address: formLocation || '',
+        opening_time: '09:00',
+        closing_time: '21:00',
+        is_visible: true,
+        match_duration_minutes: 20,
+        slot_duration_minutes: 30,
+      });
+      setShowCreate(false);
+      toast.success('Canasta creada');
+      loadData();
+    } catch (err) {
+      console.error('createCourt:', err);
+      toast.error('No se pudo crear la canasta. Inténtalo de nuevo.');
+    }
   };
 
   const handleUpdate = async () => {
-    if (!editCourt || !formName.trim()) return;
-    await updateCourt(editCourt.id, {
-      name: formName,
-      location: formLocation,
-      status: formStatus,
-    });
-    setEditCourt(null);
-    toast.success('Canasta actualizada');
-    loadData();
+    if (!canManageCourts || !editCourt || !formName.trim()) return;
+    try {
+      await updateCourt(editCourt.id, {
+        name: formName,
+        location: formLocation,
+        status: formStatus,
+      });
+      setEditCourt(null);
+      toast.success('Canasta actualizada');
+      loadData();
+    } catch (err) {
+      console.error('updateCourt:', err);
+      toast.error('No se pudo actualizar la canasta. Inténtalo de nuevo.');
+    }
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
-    await deleteCourt(deleteTarget.id);
-    setDeleteTarget(null);
-    toast.success('Canasta eliminada');
-    loadData();
+    if (!canManageCourts || !deleteTarget) return;
+    try {
+      await deleteCourt(deleteTarget.id);
+      setDeleteTarget(null);
+      toast.success('Canasta eliminada');
+      loadData();
+    } catch (err) {
+      console.error('deleteCourt:', err);
+      toast.error('No se pudo eliminar la canasta. Inténtalo de nuevo.');
+    }
   };
 
   return (
@@ -101,10 +118,12 @@ export default function CourtsPage() {
           <h1 className="text-4xl text-white leading-none">Canchas</h1>
           <p className="text-[#8E8E93] text-sm mt-1 font-['Poppins'] normal-case not-italic font-normal">{courts.length} canchas registradas</p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus size={16} />
-          Agregar Canasta
-        </Button>
+        {canManageCourts && (
+          <Button onClick={openCreate}>
+            <Plus size={16} />
+            Agregar Canasta
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
@@ -135,18 +154,22 @@ export default function CourtsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CourtStatusBadge status={court.status} />
-                  <button
-                    onClick={(e) => openEdit(court, e)}
-                    className="p-1.5 rounded-lg text-[#636366] hover:text-white hover:bg-[#2C2C2E] transition-colors"
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(court); }}
-                    className="p-1.5 rounded-lg text-[#636366] hover:text-[#FF453A] hover:bg-[#2C2C2E] transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {canManageCourts && (
+                    <>
+                      <button
+                        onClick={(e) => openEdit(court, e)}
+                        className="p-1.5 rounded-lg text-[#636366] hover:text-white hover:bg-[#2C2C2E] transition-colors"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(court); }}
+                        className="p-1.5 rounded-lg text-[#636366] hover:text-[#FF453A] hover:bg-[#2C2C2E] transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               <h3 className="text-sm font-semibold text-white mb-1">{court.name}</h3>

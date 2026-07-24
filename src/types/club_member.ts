@@ -3,7 +3,7 @@ export interface ClubMember {
   gymId: string;
   userId: string;
   nickname: string;
-  email?: string;
+  // email eliminado en migration 003 (RGPD) — no volver a añadirlo
   joinedAt: string;
   level?: number;
   gamesPlayed?: number;

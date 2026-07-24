@@ -1,73 +1,87 @@
-# React + TypeScript + Vite
+# Hoop Slam — Dashboard B2B de Gestión de Gimnasios
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Panel de control para gestores de clubes con canastas inteligentes Hoop Slam.
+Producción: [hoop-slam-gyms.vercel.app](https://hoop-slam-gyms.vercel.app)
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS v4 (dark theme, accent `#7BFF00`)
+- **Deploy**: Vercel (auto-deploy desde `master`) + serverless functions en `api/`
+- **Datos**: arquitectura híbrida de dos backends (ver abajo)
 
-## React Compiler
+## Arquitectura de datos
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Cada entidad persiste en UN solo sitio:
 
-## Expanding the ESLint configuration
+| Backend | Qué guarda |
+|---|---|
+| **Firebase Firestore** (`hoopslam-a6c30`) | Operativa de pistas: `courts`, `reservations` (+subcolección `games`), `users`, `stats`, `court_blocks`, `court_incidents`. Aquí escriben la app móvil y el hardware. |
+| **Supabase** (`afhxzrnylpvjgtlewflq`) | Identidad y back-office: Auth, `profiles`, `gyms` (perfil editable del club, localizado por `slug`), `maintenance_tickets` + `maintenance_logs`. |
+| Mock in-memory (`src/data/mock/`) | Solo fallback de desarrollo cuando no hay credenciales configuradas. |
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+`src/data/api.ts` es el orquestador: decide por función a qué backend llamar.
+Las notificaciones se **derivan** de datos reales (incidencias + tickets); el estado "leída" vive en localStorage.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Autenticación y roles
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- Login con Supabase Auth (email + contraseña). **No hay registro público** — los usuarios se crean por invitación desde Admin → Gestores.
+- La sesión de Firebase del navegador se obtiene vía `/api/firebase-token` (custom token firmado server-side con `FIREBASE_SERVICE_ACCOUNT`); no viajan credenciales de Firebase en el bundle.
+- Roles: `admin` (todo), `gestor` (su club), `staff` (reservas de su club). Permisos en `src/types/auth.ts`; el acceso por club se comprueba en `GymLayout` (`canAccessGym`).
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Endpoints serverless (`api/`)
+
+Todos exigen un JWT de Supabase en `Authorization: Bearer` (ver `api/_auth.ts`):
+
+- `POST /api/invite-gestor` — crea usuario + perfil (solo admin)
+- `POST /api/update-gestor` — cambia rol / club asignado (solo admin)
+- `POST /api/delete-gestor` — elimina usuario (solo admin, no a sí mismo)
+- `POST /api/firebase-token` — emite custom token de Firebase (cualquier usuario autenticado)
+
+Edge function de Supabase: `notify-hoop-on-ticket` (notifica al equipo Hoop los tickets high/critical).
+
+## Variables de entorno
+
+**Vite (cliente, prefijo `VITE_`)** — ⚠️ sin saltos de línea al final del valor:
+
+```
+VITE_DATA_SOURCE=firebase
+VITE_SUPABASE_URL=…
+VITE_SUPABASE_ANON_KEY=…
+VITE_FIREBASE_API_KEY=…
+VITE_FIREBASE_AUTH_DOMAIN=…
+VITE_FIREBASE_PROJECT_ID=…
+VITE_FIREBASE_STORAGE_BUCKET=…
+VITE_FIREBASE_MESSAGING_SENDER_ID=…
+VITE_FIREBASE_APP_ID=…
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+**Solo server (Vercel, sin prefijo)**:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+SUPABASE_URL=…
+SUPABASE_ANON_KEY=…
+SUPABASE_SERVICE_ROLE_KEY=…
+FIREBASE_SERVICE_ACCOUNT={"type":"service_account",…}   # JSON completo
+```
+
+Solo desarrollo local (fallback DEV de auth Firebase, nunca en Vercel): `VITE_FIREBASE_AUTH_EMAIL`, `VITE_FIREBASE_AUTH_PASSWORD`.
+
+## Migraciones Supabase
+
+Aplicar en orden `supabase/schema.sql` → `migrations/001…007` (+ `gdpr_schema.sql`).
+La 007 añade las policies por `slug` de `gyms` y siembra el club Laietà.
+
+## Scripts
+
+```
+npm run dev        # servidor de desarrollo
+npm run build      # tsc -b && vite build
+npm run lint       # eslint
+npm run typecheck  # tsc --noEmit
+```
+
+## Documentación
+
+- `HOOP_SLAM_CONTEXT.md` — contexto de producto
+- `docs/security-audit.md` — auditoría de seguridad
+- `docs/ux/` — specs de UX

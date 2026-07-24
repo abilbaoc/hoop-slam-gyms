@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Bell, Wrench, Calendar, AlertTriangle, Info, CheckCheck } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../../data/api';
-import { useGym } from '../../contexts/GymContext';
+import { useGymLayout } from '../../layouts/GymLayout';
 import type { AppNotification, NotificationType } from '../../types/notification';
 
 const TYPE_CONFIG: Record<NotificationType, { icon: React.ElementType; color: string; bg: string }> = {
@@ -11,6 +11,9 @@ const TYPE_CONFIG: Record<NotificationType, { icon: React.ElementType; color: st
   system_alert:           { icon: AlertTriangle, color: 'text-[#FF9F0A]', bg: 'bg-[#FF9F0A]/10' },
   low_occupancy_warning:  { icon: Info,          color: 'text-[#0A84FF]', bg: 'bg-[#0A84FF]/10' },
 };
+
+// Fallback para tipos desconocidos: evita crashear el render
+const FALLBACK_CONFIG = { icon: Bell, color: 'text-[#8E8E93]', bg: 'bg-[#2C2C2E]' };
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -24,14 +27,17 @@ function timeAgo(iso: string): string {
 }
 
 export default function NotificationsPage() {
-  const { currentGym } = useGym();
+  const { gym: currentGym } = useGymLayout();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
     if (!currentGym?.id) return;
     setLoading(true);
-    getNotifications(currentGym.id).then(n => { setNotifications(n); setLoading(false); });
+    getNotifications(currentGym.id)
+      .then(setNotifications)
+      .catch(err => console.error('[Notifications] load:', err))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, [currentGym?.id]);
@@ -80,7 +86,7 @@ export default function NotificationsPage() {
       ) : (
         <div className="space-y-2">
           {notifications.map(n => {
-            const cfg = TYPE_CONFIG[n.type];
+            const cfg = TYPE_CONFIG[n.type] ?? FALLBACK_CONFIG;
             const Icon = cfg.icon;
             return (
               <div

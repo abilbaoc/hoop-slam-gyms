@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Filter, Trophy, Users } from 'lucide-react';
+import LoadErrorState from '../../components/shared/LoadErrorState';
 import { getReservations, getMatches, getCourts } from '../../data/api';
-import { useGym } from '../../contexts/GymContext';
+import { useGymLayout } from '../../layouts/GymLayout';
 import type { Reservation, Match, Court } from '../../types';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
@@ -18,16 +19,18 @@ const tabs = [
 const FORMAT_LABEL: Record<string, string> = { '1v1': '1 vs 1', '2v2': '2 vs 2', '3v3': '3 vs 3' };
 
 export default function ReservationsPage() {
-  const { currentGym } = useGym();
+  const { gym: currentGym } = useGymLayout();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>('all');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [filterCourtId, setFilterCourtId] = useState('');
 
-  useEffect(() => {
+  const load = useCallback(() => {
     setLoading(true);
+    setError(false);
     const gymId = currentGym?.id;
     Promise.all([
       getReservations({ gymId }),
@@ -37,9 +40,13 @@ export default function ReservationsPage() {
       setReservations(res);
       setMatches(mat);
       setCourts(cts);
-      setLoading(false);
-    });
+    }).catch((err) => {
+      console.error('[Reservations] load:', err);
+      setError(true);
+    }).finally(() => setLoading(false));
   }, [currentGym?.id]);
+
+  useEffect(() => { load(); }, [load]);
 
   const myCourtIds = useMemo(() => new Set(courts.map(c => c.id)), [courts]);
   const courtMap = useMemo(() => new Map(courts.map(c => [c.id, c.name])), [courts]);
@@ -110,6 +117,8 @@ export default function ReservationsPage() {
         <div className="flex items-center justify-center py-16">
           <div className="w-6 h-6 border-2 border-[#7BFF00] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : error ? (
+        <LoadErrorState onRetry={load} />
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Trophy size={40} className="text-[#3C3C3E] mb-3" />

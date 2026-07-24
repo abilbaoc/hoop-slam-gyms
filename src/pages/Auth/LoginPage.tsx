@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Building2, UserCircle, Loader2, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { isSupabaseConfigured } from '../../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import type { UserRole } from '../../types/auth';
 import { gyms } from '../../data/mock/gyms';
 import { Button } from '../../components/ui/Button';
@@ -13,8 +13,8 @@ import { toast } from 'sonner';
 // ── Mock Login (redesigned: 1-click per role) ──
 
 const roles: { role: UserRole; icon: typeof Shield; label: string; features: string[] }[] = [
-  { role: 'admin', icon: Shield, label: 'Administrador', features: ['Todos los gimnasios', 'Usuarios y permisos', 'Configuracion completa', 'Reportes y analitica'] },
-  { role: 'gestor', icon: Building2, label: 'Gestor', features: ['Tu gimnasio', 'Canchas y precios', 'Reservas', 'Reportes'] },
+  { role: 'admin', icon: Shield, label: 'Administrador', features: ['Todos los clubes', 'Gestores y permisos', 'Incidencias', 'Estadisticas'] },
+  { role: 'gestor', icon: Building2, label: 'Gestor', features: ['Tu club', 'Canastas', 'Reservas', 'Incidencias'] },
   { role: 'staff', icon: UserCircle, label: 'Staff', features: ['Reservas', 'Vista general'] },
 ];
 
@@ -130,13 +130,29 @@ function SupabaseLogin() {
     if (result.error) { setError(result.error); } else { navigate('/'); }
   };
 
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      toast.error('Escribe tu email arriba y vuelve a pulsar el enlace');
+      return;
+    }
+    if (!supabase) return;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+    });
+    if (resetError) {
+      toast.error('No se pudo enviar el email de recuperacion');
+    } else {
+      toast.success('Te hemos enviado un email para restablecer tu contrasena');
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <Card className="space-y-4 p-6">
         <Input label="Email" type="email" placeholder="tu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
         <div className="space-y-1.5">
           <Input label="Contrasena" type="password" placeholder="Tu contrasena" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
-          <button type="button" onClick={() => toast.info('Funcionalidad disponible pronto')} className="text-xs text-[#7BFF00] hover:underline">
+          <button type="button" onClick={handleForgotPassword} className="text-xs text-[#7BFF00] hover:underline">
             Olvidaste tu contrasena?
           </button>
         </div>

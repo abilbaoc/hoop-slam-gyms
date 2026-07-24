@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Building2, MoreHorizontal, Pencil, Trash2, ExternalLink } from 'lucide-react';
+import { Plus, Building2, Pencil, ExternalLink } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { getGyms, updateGym, createGym } from '../../data/api';
@@ -30,6 +30,8 @@ function ClubModal({ gym, onClose, onSaved }: { gym?: Gym; onClose: () => void; 
       }
       onSaved();
       onClose();
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'No se pudo guardar el club');
     } finally {
       setSaving(false);
     }
@@ -71,13 +73,12 @@ export default function AdminClubsPage() {
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [editGym, setEditGym] = useState<Gym | undefined>();
-  const [menuOpen, setMenuOpen] = useState<string | null>(null);
-
-  // Server-side guard is in App.tsx (AdminGuard); this is a defence-in-depth check
-  if (currentUser?.role !== 'admin') return <Navigate to="/" replace />;
 
   const load = () => getGyms().then(setGyms);
   useEffect(() => { load(); }, []);
+
+  // Server-side guard is in App.tsx (AdminGuard); this is a defence-in-depth check
+  if (currentUser?.role !== 'admin') return <Navigate to="/" replace />;
 
   return (
     <div className="space-y-6">
@@ -101,8 +102,8 @@ export default function AdminClubsPage() {
           <Button className="mt-4" onClick={() => setShowCreate(true)}><Plus size={16} /> Crear club</Button>
         </div>
       ) : (
-        <div className="rounded-2xl border border-[#2C2C2E] overflow-hidden">
-          <table className="w-full text-left">
+        <div className="rounded-2xl border border-[#2C2C2E] overflow-x-auto">
+          <table className="w-full text-left min-w-[640px]">
             <thead className="bg-[#1C1C1E]">
               <tr className="border-b border-[#2C2C2E]">
                 {['Nombre', 'Ciudad', 'Dirección', 'Cestas', '', 'Acciones'].map(col => (
@@ -119,35 +120,19 @@ export default function AdminClubsPage() {
                   <td className="px-4 py-3 text-sm text-white">{gym.courts.length}</td>
                   <td className="px-4 py-3">
                     <button
-                      onClick={() => navigate(`/gym/${gym.id}/dashboard`)}
+                      onClick={() => navigate(`/gym/${gym.slug || gym.id}/dashboard`)}
                       className="flex items-center gap-1.5 text-xs text-[#7BFF00] hover:underline"
                     >
                       <ExternalLink size={12} /> Ver club
                     </button>
                   </td>
-                  <td className="px-4 py-3 relative">
+                  <td className="px-4 py-3">
                     <button
-                      onClick={() => setMenuOpen(menuOpen === gym.id ? null : gym.id)}
-                      className="p-1.5 rounded-lg text-[#8E8E93] hover:text-white hover:bg-[#2C2C2E] transition-colors"
+                      onClick={() => setEditGym(gym)}
+                      className="flex items-center gap-1.5 text-xs text-[#8E8E93] hover:text-white transition-colors"
                     >
-                      <MoreHorizontal size={16} />
+                      <Pencil size={14} /> Editar
                     </button>
-                    {menuOpen === gym.id && (
-                      <div className="absolute right-4 top-10 z-10 bg-[#2C2C2E] border border-[#3C3C3E] rounded-xl shadow-xl py-1 w-44">
-                        <button
-                          onClick={() => { setEditGym(gym); setMenuOpen(null); }}
-                          className="flex items-center gap-2 w-full px-4 py-2 text-sm text-white hover:bg-[#3C3C3E]"
-                        >
-                          <Pencil size={14} /> Editar
-                        </button>
-                        <button
-                          onClick={() => { toast.error('Eliminar club no implementado en demo'); setMenuOpen(null); }}
-                          className="flex items-center gap-2 w-full px-4 py-2 text-sm text-[#FF453A] hover:bg-[#3C3C3E]"
-                        >
-                          <Trash2 size={14} /> Eliminar
-                        </button>
-                      </div>
-                    )}
                   </td>
                 </tr>
               ))}

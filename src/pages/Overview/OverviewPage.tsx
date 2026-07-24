@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { BookMarked, CalendarX, Trophy, Users } from 'lucide-react';
 import KPICard from '../../components/kpi/KPICard';
 import MatchesPerDayChart from './MatchesPerDayChart';
+import LoadErrorState from '../../components/shared/LoadErrorState';
 import { getReservations, getMatches, getClubMembers } from '../../data/api';
-import { useGym } from '../../contexts/GymContext';
+import { useGymLayout } from '../../layouts/GymLayout';
 import type { Reservation, Match } from '../../types';
 
 interface Stats {
@@ -14,12 +15,14 @@ interface Stats {
 }
 
 export default function OverviewPage() {
-  const { currentGym } = useGym();
+  const { gym: currentGym } = useGymLayout();
   const [stats, setStats] = useState<Stats | null>(null);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     const gymId = currentGym?.id;
+    setError(false);
     Promise.all([
       getReservations({ gymId }),
       getMatches({ gymId }),
@@ -32,8 +35,22 @@ export default function OverviewPage() {
         partidos_jugados: matchesData.length,
         jugadores: members.length,
       });
+    }).catch((err) => {
+      console.error('[Overview] load:', err);
+      setError(true);
     });
   }, [currentGym?.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-4xl text-white leading-none">Dashboard</h1>
+        <LoadErrorState onRetry={load} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

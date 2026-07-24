@@ -1,6 +1,6 @@
 import type { Court } from '../../types';
 
-export let courts: Court[] = [
+export const courts: Court[] = [
   {
     id: 'court-001',
     gymId: 'gym-001',

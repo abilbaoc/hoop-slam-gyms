@@ -4,7 +4,8 @@ import {
   MapPin,
   Calendar,
   Users,
-  Shield,
+  Wrench,
+  Building2,
 } from 'lucide-react';
 import { useGymLayout } from './GymLayout';
 
@@ -16,19 +17,20 @@ export default function MobileNav() {
     { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Dashboard' },
     { to: `${prefix}/courts`, icon: MapPin, label: 'Cestas' },
     { to: `${prefix}/reservations`, icon: Calendar, label: 'Reservas' },
+    { to: `${prefix}/maintenance`, icon: Wrench, label: 'Incidencias' },
     { to: `${prefix}/users`, icon: Users, label: 'Usuarios' },
-    { to: `${prefix}/gestores`, icon: Shield, label: 'Gestores' },
+    { to: `${prefix}/profile`, icon: Building2, label: 'Club' },
   ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0A0A0F] border-t border-[#2C2C2E] lg:hidden">
-      <div className="flex items-center justify-around h-16 px-2">
+      <div className="flex items-center justify-around h-16 px-1">
         {mobileNavItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl text-xs transition-colors ${
+              `flex flex-col items-center gap-1 px-2 py-1.5 rounded-xl text-[10px] transition-colors ${
                 isActive ? 'text-[#7BFF00]' : 'text-[#8E8E93]'
               }`
             }

@@ -9,8 +9,9 @@ import Badge from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { getCourts, updateCourt, getCourtSlots, createCourtSlot, updateCourtSlot, getIncidents, createIncident, updateIncident, getReservations } from '../../data/api';
 import type { FirebaseCourtIncident, IncidentType, IncidentPriority } from '../../data/api';
-import { useGym } from '../../contexts/GymContext';
+import { useGymLayout } from '../../layouts/GymLayout';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import type { Court, CourtSlot } from '../../types';
 import { toast } from 'sonner';
 
@@ -22,6 +23,7 @@ const DURATION_OPTIONS = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55,
 
 function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => void }) {
   const { currentUser } = useAuth();
+  const { canManageCourts } = usePermissions();
   const isGestor = currentUser?.role === 'gestor';
   const [name, setName] = useState(court.name);
   const [address, setAddress] = useState(court.address);
@@ -31,7 +33,17 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
   const [slotDuration, setSlotDuration] = useState(court.slot_duration_minutes);
   const [saving, setSaving] = useState(false);
 
+  const handleCancel = () => {
+    setName(court.name);
+    setAddress(court.address);
+    setOpeningTime(court.opening_time);
+    setClosingTime(court.closing_time);
+    setMatchDuration(court.match_duration_minutes);
+    setSlotDuration(court.slot_duration_minutes);
+  };
+
   const handleToggleActive = async () => {
+    if (!canManageCourts) return;
     const newActive = !court.is_active;
     const newStatus = newActive ? 'online' : 'offline' as const;
     onSaved({ ...court, is_active: newActive, status: newStatus });
@@ -45,6 +57,7 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
   };
 
   const handleSave = async () => {
+    if (!canManageCourts) return;
     if (!name.trim()) return toast.error('El nombre es obligatorio');
     if (!address.trim()) return toast.error('La dirección es obligatoria');
     if (openingTime >= closingTime) return toast.error('La apertura debe ser anterior al cierre');
@@ -72,7 +85,8 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
             <span className="text-sm text-white">Canasta activa</span>
             <button
               onClick={handleToggleActive}
-              className={`w-12 h-7 rounded-full transition-colors duration-200 relative flex-shrink-0 ${court.is_active ? 'bg-[#7BFF00]' : 'bg-[#3C3C3E]'}`}
+              disabled={!canManageCourts}
+              className={`w-12 h-7 rounded-full transition-colors duration-200 relative flex-shrink-0 ${court.is_active ? 'bg-[#7BFF00]' : 'bg-[#3C3C3E]'} ${!canManageCourts ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <span className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${court.is_active ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
@@ -138,10 +152,12 @@ function ConfigTab({ court, onSaved }: { court: Court; onSaved: (c: Court) => vo
         </Card>
       )}
 
-      <div className="flex justify-end gap-3">
-        <Button variant="secondary" onClick={() => { setName(court.name); setAddress(court.address); }}>Cancelar</Button>
-        <Button onClick={handleSave} disabled={saving}>{saving ? 'Guardando...' : 'Guardar cambios'}</Button>
-      </div>
+      {canManageCourts && (
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={handleCancel}>Cancelar</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? 'Guardando...' : 'Guardar cambios'}</Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -251,8 +267,8 @@ function SlotsTab({ court }: { court: Court }) {
       {blockedSlots.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-xs font-medium text-[#636366] uppercase">Franjas bloqueadas por el club</h3>
-          <Card className="!p-0 overflow-hidden">
-            <table className="w-full text-left">
+          <Card className="!p-0 overflow-x-auto">
+            <table className="w-full text-left min-w-[480px]">
               <thead>
                 <tr className="border-b border-[#2C2C2E]">
                   {['Inicio', 'Fin', 'Duración', 'Acciones'].map(col => (
@@ -291,8 +307,8 @@ function SlotsTab({ court }: { court: Court }) {
       {userReservations.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-xs font-medium text-[#636366] uppercase">Reservas de usuarios ({userReservations.length})</h3>
-          <Card className="!p-0 overflow-hidden">
-            <table className="w-full text-left">
+          <Card className="!p-0 overflow-x-auto">
+            <table className="w-full text-left min-w-[480px]">
               <thead>
                 <tr className="border-b border-[#2C2C2E]">
                   {['Inicio', 'Fin', 'Jugador', 'Estado'].map(col => (
@@ -404,7 +420,7 @@ function IncidenciasTab({ court }: { court: Court }) {
       setShowCreate(false);
       setNewTitle(''); setNewDesc('');
       load();
-    } catch (e) {
+    } catch {
       toast.error('Error al crear incidencia');
     } finally { setSaving(false); }
   };
@@ -511,19 +527,35 @@ function IncidenciasTab({ court }: { court: Court }) {
 export default function CourtDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { currentGym } = useGym();
-  const [court, setCourt] = useState<Court | null>(null);
+  const { gym: currentGym } = useGymLayout();
+  const [court, setCourt] = useState<Court | null | undefined>(undefined); // undefined=cargando, null=no encontrada
   const [activeTab, setActiveTab] = useState<'config' | 'slots' | 'incidencias'>('config');
 
   useEffect(() => {
-    getCourts().then(courts => {
-      const found = courts.find(c => c.id === id);
-      if (found) setCourt(found);
-    });
+    getCourts()
+      .then(courts => setCourt(courts.find(c => c.id === id) ?? null))
+      .catch(err => {
+        console.error('[CourtDetail] getCourts:', err);
+        setCourt(null);
+      });
   }, [id]);
 
-  if (!court) {
+  if (court === undefined) {
     return <div className="flex items-center justify-center h-64"><p className="text-[#8E8E93]">Cargando...</p></div>;
+  }
+
+  if (court === null) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-center">
+        <p className="text-white font-medium">Canasta no encontrada</p>
+        <button
+          onClick={() => navigate(`/gym/${currentGym?.id}/courts`)}
+          className="mt-3 text-sm text-[#7BFF00] hover:underline"
+        >
+          Volver a cestas
+        </button>
+      </div>
+    );
   }
 
   return (

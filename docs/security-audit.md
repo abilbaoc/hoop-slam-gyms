@@ -295,3 +295,19 @@ npm audit → found 0 vulnerabilities
 ---
 
 *Informe generado automáticamente. Revisión humana recomendada antes de desplegar en producción.*
+
+---
+
+## Adenda — Remediación 2026-07-24
+
+Cambios de seguridad aplicados sobre los hallazgos de esta auditoría y de la revisión posterior:
+
+| Área | Cambio |
+|---|---|
+| **Endpoints `api/*` de Vercel** | Nuevo `api/_auth.ts` con `requireAdmin()`: verifica el JWT de Supabase del llamador y su rol admin en `profiles`. Aplicado a `invite-gestor`, `update-gestor`, `delete-gestor` (antes cualquiera podía crear un admin por POST). `delete-gestor` prohíbe el auto-borrado. El cliente adjunta el token vía `authHeaders()` en `src/data/api.ts`. |
+| **Credencial Firebase en el bundle** | `ensureFirebaseAuth()` ahora usa `signInWithCustomToken` contra el nuevo `api/firebase-token` (firebase-admin + `FIREBASE_SERVICE_ACCOUNT`, server-only). Email/password quedan solo como fallback en DEV. **Pendiente manual: rotar la contraseña del usuario `laieta@hoopslam.net`** (quemada en bundles ya publicados) y eliminar `VITE_FIREBASE_AUTH_*` de Vercel. |
+| **Autorización por gym** | `GymLayout` comprueba `canAccessGym(gym.id)`; eliminada la rama "gymIds vacío ⇒ permitir"; el fallback de RootRedirect ya no manda al gym hardcodeado sino a `/pending`. |
+| **Permisos por rol** | `CourtsPage`/`CourtDetailPage` exigen `can_manage_courts` (staff = solo lectura). Ruta `gestores` protegida con guard admin y oculta del menú a no-admins. |
+| **Signup público** | Eliminado (`signUp` + whitelist inerte `isEmailAllowed`). El alta de usuarios es solo por invitación de un admin. **Pendiente manual: desactivar "Enable Sign Up" en Supabase Auth.** |
+| **Edge functions duplicadas** | Eliminadas `create-gestor`, `invite-gestor`, `invite-staff` (la vía canónica es `api/*` autenticada). Se conserva `notify-hoop-on-ticket`. |
+| **Env de Vercel** | Detectados valores con `\n` literal (p.ej. `VITE_FIREBASE_PROJECT_ID`). Corregidos en `.env.vercel` local; **pendiente manual re-guardarlos en el dashboard de Vercel** y añadir `SUPABASE_ANON_KEY` + `FIREBASE_SERVICE_ACCOUNT`. |

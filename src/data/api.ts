@@ -9,10 +9,6 @@ import type {
   FormatDistribution,
   CourtOccupancy,
   RecentMatch,
-  CourtSchedule,
-  ScheduleException,
-  PricingRule,
-  Promo,
   Reservation,
   ReservationStatus,
   AuditEntry,
@@ -34,12 +30,9 @@ import {
   getCourtOccupancy as computeCourtOccupancy,
   getRecentMatches as computeRecentMatches,
 } from './mock/generators';
-import { schedules, scheduleExceptions } from './mock/schedules';
-import { pricingRules, promos } from './mock/pricing';
 import { reservations } from './mock/reservations';
 import { gyms } from './mock/gyms';
 import { users } from './mock/users';
-import { notifications } from './mock/notifications';
 import { getAuditLog, addAuditEntry } from './mock/audit';
 import { maintenanceTicketsWithHoop as maintenanceTickets, maintenanceLogs } from './mock/maintenance-hoop';
 import type { CourtSlot } from '../types/slot';
@@ -54,7 +47,7 @@ import {
   fbGetGyms, fbGetGymById, fbGetCourts,
   fbGetMatches, fbGetReservations,
   fbGetClubMembers, fbGetStatsOverview, fbGetDailyStats,
-  fbCreateCourt, fbUpdateCourt,
+  fbCreateCourt, fbUpdateCourt, fbDeleteCourt,
   fbGetCourtBlocks, fbCreateCourtBlock, fbDeleteCourtBlock,
   fbGetCourtIncidents, fbCreateCourtIncident, fbUpdateCourtIncident,
 } from './firebaseProvider';
@@ -99,7 +92,7 @@ function mapSupabaseGym(row: Record<string, unknown>): Gym {
 
 export async function getGyms(): Promise<Gym[]> {
   if (USE_FIREBASE) {
-    try { return await fbGetGyms(); } catch (e) { console.error('[Firebase] getGyms:', e); }
+    try { return await fbGetGyms(); } catch (e) { console.error('[Firebase] getGyms:', e); throw new Error('No se pudieron cargar los clubes'); }
   }
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase.from('gyms').select('*').order('created_at');
@@ -113,7 +106,7 @@ export async function getGyms(): Promise<Gym[]> {
 
 export async function getCourts(gymId?: string): Promise<Court[]> {
   if (USE_FIREBASE) {
-    try { return await fbGetCourts(gymId); } catch (e) { console.error('[Firebase] getCourts:', e); }
+    try { return await fbGetCourts(gymId); } catch (e) { console.error('[Firebase] getCourts:', e); throw new Error('No se pudieron cargar las canastas'); }
   }
   await delay();
   const ids = getGymCourtIds(gymId);
@@ -141,7 +134,7 @@ export async function updateCourt(id: string, data: Partial<Court>): Promise<Cou
       const updatedCourts = await fbGetCourts();
       const updated = updatedCourts.find(c => c.id === id);
       if (updated) return updated;
-    } catch (e) { console.error('[Firebase] updateCourt:', e); }
+    } catch (e) { console.error('[Firebase] updateCourt:', e); throw e; }
   }
   await delay();
   const idx = courts.findIndex((c) => c.id === id);
@@ -152,6 +145,10 @@ export async function updateCourt(id: string, data: Partial<Court>): Promise<Cou
 }
 
 export async function deleteCourt(id: string): Promise<void> {
+  if (USE_FIREBASE) {
+    await fbDeleteCourt(id);
+    return;
+  }
   await delay();
   const court = courts.find((c) => c.id === id);
   const idx = courts.findIndex((c) => c.id === id);
@@ -169,7 +166,7 @@ export async function getMatches(filters?: {
   gymId?: string;
 }): Promise<Match[]> {
   if (USE_FIREBASE) {
-    try { return await fbGetMatches(filters); } catch (e) { console.error('[Firebase] getMatches:', e); }
+    try { return await fbGetMatches(filters); } catch (e) { console.error('[Firebase] getMatches:', e); throw new Error('No se pudieron cargar los partidos'); }
   }
   await delay();
   let result = matches;
@@ -239,111 +236,6 @@ export async function getRecentMatchesData(limit?: number, gymId?: string): Prom
   return computeRecentMatches(fm, fc, limit);
 }
 
-// ── Schedules ──
-
-export async function getSchedules(gymId?: string): Promise<CourtSchedule[]> {
-  await delay();
-  const ids = getGymCourtIds(gymId);
-  return ids ? schedules.filter((s) => ids.has(s.courtId)) : schedules;
-}
-
-export async function getScheduleExceptions(gymId?: string): Promise<ScheduleException[]> {
-  await delay();
-  const ids = getGymCourtIds(gymId);
-  return ids ? scheduleExceptions.filter((e) => ids.has(e.courtId)) : scheduleExceptions;
-}
-
-export async function updateSchedule(courtId: string, data: Partial<CourtSchedule>): Promise<CourtSchedule> {
-  await delay();
-  const idx = schedules.findIndex((s) => s.courtId === courtId);
-  if (idx === -1) throw new Error('Schedule not found');
-  schedules[idx] = { ...schedules[idx], ...data };
-  addAuditEntry({ action: 'update', entity: 'schedule', entityId: courtId, description: `Actualizo horario de canasta` });
-  return schedules[idx];
-}
-
-export async function createException(data: Omit<ScheduleException, 'id'>): Promise<ScheduleException> {
-  await delay();
-  const exc: ScheduleException = { ...data, id: `exc-${String(scheduleExceptions.length + 1).padStart(3, '0')}` };
-  scheduleExceptions.push(exc);
-  addAuditEntry({ action: 'create', entity: 'schedule', entityId: exc.id, description: `Creo excepcion: ${data.reason}` });
-  return exc;
-}
-
-export async function deleteException(id: string): Promise<void> {
-  await delay();
-  const idx = scheduleExceptions.findIndex((e) => e.id === id);
-  if (idx === -1) throw new Error('Exception not found');
-  scheduleExceptions.splice(idx, 1);
-  addAuditEntry({ action: 'delete', entity: 'schedule', entityId: id, description: `Elimino excepcion de horario` });
-}
-
-// ── Pricing ──
-
-export async function getPricingRules(gymId?: string): Promise<PricingRule[]> {
-  await delay();
-  if (!gymId) return pricingRules;
-  return pricingRules.filter((r) => r.gymId === gymId);
-}
-
-export async function createPricingRule(data: Omit<PricingRule, 'id'>): Promise<PricingRule> {
-  await delay();
-  const rule: PricingRule = { ...data, id: `price-${String(pricingRules.length + 1).padStart(3, '0')}` };
-  pricingRules.push(rule);
-  addAuditEntry({ action: 'create', entity: 'pricing', entityId: rule.id, description: `Creo regla de precio "${rule.name}"` });
-  return rule;
-}
-
-export async function updatePricingRule(id: string, data: Partial<PricingRule>): Promise<PricingRule> {
-  await delay();
-  const idx = pricingRules.findIndex((r) => r.id === id);
-  if (idx === -1) throw new Error('Pricing rule not found');
-  pricingRules[idx] = { ...pricingRules[idx], ...data };
-  addAuditEntry({ action: 'update', entity: 'pricing', entityId: id, description: `Actualizo regla "${pricingRules[idx].name}"` });
-  return pricingRules[idx];
-}
-
-export async function deletePricingRule(id: string): Promise<void> {
-  await delay();
-  const idx = pricingRules.findIndex((r) => r.id === id);
-  if (idx === -1) throw new Error('Pricing rule not found');
-  pricingRules.splice(idx, 1);
-  addAuditEntry({ action: 'delete', entity: 'pricing', entityId: id, description: `Elimino regla de precio` });
-}
-
-// ── Promos ──
-
-export async function getPromos(gymId?: string): Promise<Promo[]> {
-  await delay();
-  if (!gymId) return promos;
-  return promos.filter((p) => p.gymId === gymId);
-}
-
-export async function createPromo(data: Omit<Promo, 'id'>): Promise<Promo> {
-  await delay();
-  const promo: Promo = { ...data, id: `promo-${String(promos.length + 1).padStart(3, '0')}` };
-  promos.push(promo);
-  addAuditEntry({ action: 'create', entity: 'promo', entityId: promo.id, description: `Creo promo "${promo.name}"` });
-  return promo;
-}
-
-export async function updatePromo(id: string, data: Partial<Promo>): Promise<Promo> {
-  await delay();
-  const idx = promos.findIndex((p) => p.id === id);
-  if (idx === -1) throw new Error('Promo not found');
-  promos[idx] = { ...promos[idx], ...data };
-  addAuditEntry({ action: 'update', entity: 'promo', entityId: id, description: `Actualizo promo "${promos[idx].name}"` });
-  return promos[idx];
-}
-
-export async function deletePromo(id: string): Promise<void> {
-  await delay();
-  const idx = promos.findIndex((p) => p.id === id);
-  if (idx === -1) throw new Error('Promo not found');
-  promos.splice(idx, 1);
-  addAuditEntry({ action: 'delete', entity: 'promo', entityId: id, description: `Elimino promo` });
-}
-
 // ── Reservations ──
 
 export async function getReservations(filters?: {
@@ -353,7 +245,7 @@ export async function getReservations(filters?: {
   gymId?: string;
 }): Promise<Reservation[]> {
   if (USE_FIREBASE) {
-    try { return await fbGetReservations(filters); } catch (e) { console.error('[Firebase] getReservations:', e); }
+    try { return await fbGetReservations(filters); } catch (e) { console.error('[Firebase] getReservations:', e); throw new Error('No se pudieron cargar las reservas'); }
   }
   await delay();
   let result = reservations;
@@ -363,50 +255,6 @@ export async function getReservations(filters?: {
   if (filters?.date) result = result.filter((r) => r.date === filters.date);
   if (filters?.status) result = result.filter((r) => r.status === filters.status);
   return result;
-}
-
-export async function createReservation(data: Omit<Reservation, 'id' | 'createdAt'>): Promise<Reservation> {
-  await delay();
-  const res: Reservation = {
-    ...data,
-    id: `res-${String(reservations.length + 1).padStart(3, '0')}`,
-    createdAt: new Date().toISOString(),
-  };
-  reservations.push(res);
-  addAuditEntry({ action: 'create', entity: 'reservation', entityId: res.id, description: `Creo reserva para ${res.playerName}` });
-  return res;
-}
-
-export async function cancelReservation(id: string): Promise<void> {
-  await delay();
-  const idx = reservations.findIndex((r) => r.id === id);
-  if (idx === -1) throw new Error('Reservation not found');
-  reservations[idx] = { ...reservations[idx], status: 'cancelled' };
-  addAuditEntry({ action: 'update', entity: 'reservation', entityId: id, description: `Cancelo reserva de ${reservations[idx].playerName}` });
-}
-
-export async function blockSlot(data: {
-  courtId: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  reason: string;
-}): Promise<Reservation> {
-  await delay();
-  const res: Reservation = {
-    id: `res-block-${String(reservations.length + 1).padStart(3, '0')}`,
-    courtId: data.courtId,
-    date: data.date,
-    startTime: data.startTime,
-    endTime: data.endTime,
-    playerName: data.reason,
-    format: '1v1',
-    status: 'blocked',
-    createdAt: new Date().toISOString(),
-  };
-  reservations.push(res);
-  addAuditEntry({ action: 'create', entity: 'reservation', entityId: res.id, description: `Bloqueo franja ${data.startTime}-${data.endTime}: ${data.reason}` });
-  return res;
 }
 
 // ── Audit ──
@@ -439,68 +287,338 @@ export async function getUsers(gymId?: string): Promise<AppUser[]> {
   return users.filter(u => u.gymIds.includes(gymId));
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The app's gym ids are Firebase slugs ('laieta'); Supabase gyms use uuid ids + a unique slug. */
+async function getSupabaseGymRow(id: string): Promise<Record<string, unknown> | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const column = UUID_RE.test(id) ? 'id' : 'slug';
+  const { data, error } = await supabase.from('gyms').select('*').eq(column, id).maybeSingle();
+  if (error || !data) return null;
+  return data as Record<string, unknown>;
+}
+
 export async function getGymById(id: string): Promise<Gym | undefined> {
   if (USE_FIREBASE) {
-    try { return await fbGetGymById(id); } catch (e) { console.error('[Firebase] getGymById:', e); }
+    try {
+      const base = await fbGetGymById(id);
+      if (!base) return undefined;
+      // Overlay del perfil editable guardado en Supabase (localizado por slug)
+      const row = await getSupabaseGymRow(id);
+      if (!row) return base;
+      const overlay = mapSupabaseGym(row);
+      return {
+        ...base,
+        name: overlay.name || base.name,
+        address: overlay.address || base.address,
+        city: overlay.city || base.city,
+        phone: overlay.phone || base.phone,
+        email: overlay.email || base.email,
+        openingHours: (row.opening_hours as GymOpeningHours) ?? base.openingHours,
+      };
+    } catch (e) {
+      console.error('[Firebase] getGymById:', e);
+    }
   }
   if (isSupabaseConfigured && supabase) {
-    const { data, error } = await supabase.from('gyms').select('*').eq('id', id).single();
-    if (!error && data) return mapSupabaseGym(data as Record<string, unknown>);
-    return undefined;
+    const row = await getSupabaseGymRow(id);
+    return row ? mapSupabaseGym(row) : undefined;
   }
   await delay();
   return gyms.find(g => g.id === id);
 }
 
-// In-memory cache for gym updates (no gyms collection in Firebase yet)
-const gymOverrides = new Map<string, Partial<Gym>>();
-
 export async function updateGym(id: string, data: Partial<Gym>): Promise<Gym> {
-  // Get the current gym first
   const current = await getGymById(id);
   if (!current) throw new Error('Gym not found');
-  // Merge and cache
-  const merged = { ...current, ...gymOverrides.get(id), ...data };
-  gymOverrides.set(id, merged);
-  return merged;
+
+  if (isSupabaseConfigured && supabase) {
+    const patch: Record<string, unknown> = {};
+    if (data.name !== undefined) patch.name = data.name;
+    if (data.address !== undefined) patch.address = data.address;
+    if (data.city !== undefined) patch.city = data.city;
+    if (data.phone !== undefined) patch.phone = data.phone;
+    if (data.email !== undefined) patch.email = data.email;
+    if (data.openingHours !== undefined) patch.opening_hours = data.openingHours;
+
+    if (Object.keys(patch).length > 0) {
+      const column = UUID_RE.test(id) ? 'id' : 'slug';
+      const { error } = await supabase.from('gyms').update(patch).eq(column, id);
+      if (error) throw new Error(`Error guardando el perfil del club: ${error.message}`);
+    }
+    return { ...current, ...data };
+  }
+
+  // Mock (solo dev sin Supabase)
+  await delay();
+  const mockGym = gyms.find(g => g.id === id);
+  if (mockGym) Object.assign(mockGym, data);
+  return { ...current, ...data };
 }
 
 // ── Notifications ──
+// Derivadas de datos reales (incidencias de Firestore + tickets de Supabase).
+// El estado "leída" vive en localStorage: no hay tabla de notificaciones
+// compatible con los gym ids tipo slug.
+
+const NOTIF_READ_KEY = 'hoop-notifs-read';
+
+function getReadNotifIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(NOTIF_READ_KEY);
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveReadNotifIds(ids: Set<string>): void {
+  try {
+    localStorage.setItem(NOTIF_READ_KEY, JSON.stringify([...ids]));
+  } catch { /* storage lleno o bloqueado: no-op */ }
+}
 
 export async function getNotifications(gymId?: string): Promise<AppNotification[]> {
-  await delay();
-  let result = notifications;
-  if (gymId) result = result.filter(n => n.gymId === gymId);
+  if (!gymId) return [];
+  const read = getReadNotifIds();
+  const result: AppNotification[] = [];
+
+  // Incidencias de pista abiertas (Firebase)
+  try {
+    const incidents = await getIncidents();
+    for (const inc of incidents) {
+      if (inc.status === 'resolved') continue;
+      result.push({
+        id: `inc-${inc.id}`,
+        gymId,
+        type: 'maintenance_alert',
+        title: `Incidencia: ${inc.title}`,
+        message: inc.description || 'Incidencia reportada en una canasta',
+        read: read.has(`inc-${inc.id}`),
+        createdAt: inc.createdAt,
+      });
+    }
+  } catch (e) {
+    console.error('[Notifications] incidents:', e);
+  }
+
+  // Tickets de mantenimiento (Supabase)
+  try {
+    const { tickets } = await getMaintenanceTickets(gymId);
+    for (const t of tickets) {
+      if (t.status === 'resolved' || t.status === 'closed') continue;
+      const isCritical = t.priority === 'critical';
+      result.push({
+        id: `ticket-${t.id}`,
+        gymId,
+        type: isCritical ? 'system_alert' : 'maintenance_alert',
+        title: isCritical ? `Ticket critico: ${t.title}` : `Ticket abierto: ${t.title}`,
+        message: t.hoopStatus ? `Estado Hoop: ${t.hoopStatus}` : t.description || 'Ticket de mantenimiento abierto',
+        read: read.has(`ticket-${t.id}`),
+        createdAt: t.createdAt,
+      });
+    }
+  } catch (e) {
+    console.error('[Notifications] tickets:', e);
+  }
+
   return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-  await delay();
-  const n = notifications.find(n => n.id === id);
-  if (n) n.read = true;
+  const read = getReadNotifIds();
+  read.add(id);
+  saveReadNotifIds(read);
 }
 
 export async function markAllNotificationsRead(gymId: string): Promise<void> {
-  await delay();
-  notifications.filter(n => n.gymId === gymId).forEach(n => n.read = true);
+  const all = await getNotifications(gymId);
+  const read = getReadNotifIds();
+  all.forEach(n => read.add(n.id));
+  saveReadNotifIds(read);
 }
 
 export async function getUnreadNotificationCount(gymId: string): Promise<number> {
-  await delay();
-  return notifications.filter(n => n.gymId === gymId && !n.read).length;
+  const all = await getNotifications(gymId);
+  return all.filter(n => !n.read).length;
 }
 
 // ── Maintenance ──
 
-import type { MaintenanceLog } from '../types/maintenance';
-import type { MaintenanceTicketWithHoop } from '../types/maintenance-hoop';
+import type { MaintenanceLog, TicketPriority, TicketStatus, MaintenanceAction } from '../types/maintenance';
+import type { MaintenanceTicketWithHoop, HoopTicketStatus } from '../types/maintenance-hoop';
+
+function mapTicketRow(row: Record<string, unknown>): MaintenanceTicketWithHoop {
+  return {
+    id: row.id as string,
+    courtId: row.court_id as string,
+    gymId: row.gym_id as string,
+    title: row.title as string,
+    description: (row.description as string) ?? '',
+    priority: row.priority as TicketPriority,
+    status: row.status as TicketStatus,
+    assignedTo: (row.assigned_to as string) ?? null,
+    createdBy: row.created_by as string,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+    resolvedAt: (row.resolved_at as string) ?? null,
+    hoopStatus: (row.hoop_status as HoopTicketStatus) ?? null,
+    hoopAssignedTo: (row.hoop_assigned_to as string) ?? null,
+    hoopNotes: (row.hoop_notes as string) ?? null,
+    notifiedAt: (row.notified_at as string) ?? null,
+  };
+}
+
+function mapLogRow(row: Record<string, unknown>): MaintenanceLog {
+  return {
+    id: row.id as string,
+    ticketId: row.ticket_id as string,
+    action: row.action as MaintenanceAction,
+    userId: row.user_id as string,
+    comment: (row.comment as string) ?? null,
+    timestamp: row.timestamp as string,
+  };
+}
 
 export async function getMaintenanceTickets(gymId: string): Promise<{ tickets: MaintenanceTicketWithHoop[]; logs: MaintenanceLog[] }> {
+  if (isSupabaseConfigured && supabase) {
+    const { data: ticketRows, error } = await supabase
+      .from('maintenance_tickets')
+      .select('*')
+      .eq('gym_id', gymId)
+      .order('created_at', { ascending: false });
+    if (error) throw new Error(`Error cargando incidencias: ${error.message}`);
+    const tickets = (ticketRows ?? []).map(mapTicketRow);
+
+    let logs: MaintenanceLog[] = [];
+    if (tickets.length > 0) {
+      const { data: logRows, error: logError } = await supabase
+        .from('maintenance_logs')
+        .select('*')
+        .in('ticket_id', tickets.map(t => t.id))
+        .order('timestamp', { ascending: true });
+      if (logError) throw new Error(`Error cargando historial: ${logError.message}`);
+      logs = (logRows ?? []).map(mapLogRow);
+    }
+    return { tickets, logs };
+  }
   await delay();
   const tickets = maintenanceTickets.filter(t => t.gymId === gymId);
   const ticketIds = new Set(tickets.map(t => t.id));
   const logs = maintenanceLogs.filter(l => ticketIds.has(l.ticketId));
   return { tickets, logs };
+}
+
+export interface CreateMaintenanceTicketPayload {
+  courtId: string;
+  gymId: string;
+  title: string;
+  description: string;
+  priority: TicketPriority;
+  createdBy: string;
+  assignedTo?: string | null;
+  hoopStatus?: HoopTicketStatus | null;
+  notifiedAt?: string | null;
+}
+
+export async function createMaintenanceTicket(data: CreateMaintenanceTicketPayload): Promise<MaintenanceTicketWithHoop> {
+  if (isSupabaseConfigured && supabase) {
+    const { data: row, error } = await supabase
+      .from('maintenance_tickets')
+      .insert({
+        court_id: data.courtId,
+        gym_id: data.gymId,
+        title: data.title,
+        description: data.description,
+        priority: data.priority,
+        created_by: data.createdBy,
+        assigned_to: data.assignedTo ?? null,
+        hoop_status: data.hoopStatus ?? null,
+        notified_at: data.notifiedAt ?? null,
+      })
+      .select()
+      .single();
+    if (error || !row) throw new Error(`Error creando incidencia: ${error?.message ?? 'sin datos'}`);
+
+    await supabase.from('maintenance_logs').insert({
+      ticket_id: row.id,
+      action: 'created',
+      user_id: data.createdBy,
+      comment: null,
+    });
+
+    return mapTicketRow(row as Record<string, unknown>);
+  }
+  // Mock (solo dev sin Supabase): objeto local no persistente
+  await delay();
+  const now = new Date().toISOString();
+  const ticket: MaintenanceTicketWithHoop = {
+    id: `maint-${Date.now()}`,
+    courtId: data.courtId,
+    gymId: data.gymId,
+    title: data.title,
+    description: data.description,
+    priority: data.priority,
+    status: 'open',
+    assignedTo: data.assignedTo ?? null,
+    createdBy: data.createdBy,
+    createdAt: now,
+    updatedAt: now,
+    resolvedAt: null,
+    hoopStatus: data.hoopStatus ?? null,
+    hoopAssignedTo: null,
+    hoopNotes: null,
+    notifiedAt: data.notifiedAt ?? null,
+  };
+  maintenanceTickets.unshift(ticket);
+  return ticket;
+}
+
+export async function updateMaintenanceTicketStatus(id: string, status: TicketStatus, userId: string): Promise<void> {
+  const resolvedAt = status === 'resolved' || status === 'closed' ? new Date().toISOString() : null;
+  if (isSupabaseConfigured && supabase) {
+    const { error } = await supabase
+      .from('maintenance_tickets')
+      .update({ status, resolved_at: resolvedAt })
+      .eq('id', id);
+    if (error) throw new Error(`Error actualizando incidencia: ${error.message}`);
+    await supabase.from('maintenance_logs').insert({
+      ticket_id: id,
+      action: 'status_changed',
+      user_id: userId,
+      comment: `Estado cambiado a ${status}`,
+    });
+    return;
+  }
+  await delay();
+  const ticket = maintenanceTickets.find(t => t.id === id);
+  if (ticket) {
+    ticket.status = status;
+    ticket.resolvedAt = resolvedAt;
+    ticket.updatedAt = new Date().toISOString();
+  }
+}
+
+export async function addMaintenanceComment(ticketId: string, userId: string, comment: string): Promise<void> {
+  if (isSupabaseConfigured && supabase) {
+    const { error } = await supabase.from('maintenance_logs').insert({
+      ticket_id: ticketId,
+      action: 'commented',
+      user_id: userId,
+      comment,
+    });
+    if (error) throw new Error(`Error guardando comentario: ${error.message}`);
+    return;
+  }
+  await delay();
+  maintenanceLogs.push({
+    id: `log-${Date.now()}`,
+    ticketId,
+    action: 'commented',
+    userId,
+    comment,
+    timestamp: new Date().toISOString(),
+  });
 }
 
 export async function getMaintenanceStats(gymId: string): Promise<{
@@ -509,8 +627,7 @@ export async function getMaintenanceStats(gymId: string): Promise<{
   avgResolutionHours: number;
   resolvedThisMonth: number;
 }> {
-  await delay();
-  const tickets = maintenanceTickets.filter(t => t.gymId === gymId);
+  const { tickets } = await getMaintenanceTickets(gymId);
   const open = tickets.filter(t => t.status === 'open' || t.status === 'in_progress').length;
   const critical = tickets.filter(t => t.priority === 'critical' && t.status !== 'closed' && t.status !== 'resolved').length;
   const resolved = tickets.filter(t => t.resolvedAt);
@@ -531,7 +648,7 @@ export async function getStatsOverview(gymId: string): Promise<StatsOverview> {
     try {
       const courtIds = (await fbGetCourts(gymId)).map(c => c.id);
       return await fbGetStatsOverview(gymId, courtIds);
-    } catch (e) { console.error('[Firebase] getStatsOverview:', e); }
+    } catch (e) { console.error('[Firebase] getStatsOverview:', e); throw new Error('No se pudieron cargar las estadisticas'); }
   }
   await delay();
   const ids = getGymCourtIds(gymId);
@@ -555,7 +672,7 @@ export async function getDailyStats(gymId: string, days: number): Promise<DailyS
     try {
       const courtIds = (await fbGetCourts(gymId)).map(c => c.id);
       return await fbGetDailyStats(gymId, courtIds, days);
-    } catch (e) { console.error('[Firebase] getDailyStats:', e); }
+    } catch (e) { console.error('[Firebase] getDailyStats:', e); throw new Error('No se pudieron cargar las estadisticas diarias'); }
   }
   await delay();
   const ids = getGymCourtIds(gymId);
@@ -589,7 +706,7 @@ export async function getCourtSlots(courtId: string, date: string): Promise<Cour
         status: 'blocked' as const,
         createdAt: b.createdAt,
       }));
-    } catch (e) { console.error('[Firebase] getCourtSlots:', e); }
+    } catch (e) { console.error('[Firebase] getCourtSlots:', e); throw new Error('No se pudieron cargar las franjas'); }
   }
   await delay();
   return courtSlotsData.filter((s) => s.courtId === courtId && s.date === date);
@@ -656,7 +773,7 @@ export { type FirebaseCourtIncident, type IncidentType, type IncidentPriority, t
 
 export async function getIncidents(courtId?: string): Promise<FirebaseCourtIncident[]> {
   if (USE_FIREBASE) {
-    try { return await fbGetCourtIncidents(courtId); } catch (e) { console.error('[Firebase] getIncidents:', e); }
+    try { return await fbGetCourtIncidents(courtId); } catch (e) { console.error('[Firebase] getIncidents:', e); throw new Error('No se pudieron cargar las incidencias'); }
   }
   return [];
 }
@@ -714,7 +831,7 @@ export async function createGym(data: { name: string; city: string; address?: st
 
 export async function getClubMembers(gymId: string): Promise<ClubMember[]> {
   if (USE_FIREBASE) {
-    try { return await fbGetClubMembers(gymId); } catch (e) { console.error('[Firebase] getClubMembers:', e); }
+    try { return await fbGetClubMembers(gymId); } catch (e) { console.error('[Firebase] getClubMembers:', e); throw new Error('No se pudieron cargar los miembros'); }
   }
   await delay();
   return clubMembersData.filter((m) => m.gymId === gymId);
@@ -746,10 +863,21 @@ export async function updateUserRole(userId: string, newRole: 'admin' | 'gestor'
 
 // ── Invite Gestor ──
 
+/** Headers for calls to the /api/* serverless endpoints: JSON + Supabase JWT. */
+async function authHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (isSupabaseConfigured && supabase) {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export interface InviteGestorPayload {
   email: string;
   name: string;
-  role: 'admin' | 'gestor' | 'viewer';
+  role: 'admin' | 'gestor' | 'staff';
   gymIds: string[];
   password: string;
 }
@@ -772,7 +900,7 @@ export interface InviteGestorResult {
 export async function inviteGestor(data: InviteGestorPayload): Promise<InviteGestorResult> {
   const res = await fetch('/api/invite-gestor', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await authHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -792,7 +920,7 @@ export async function inviteGestor(data: InviteGestorPayload): Promise<InviteGes
 export async function deleteGestor(userId: string): Promise<void> {
   const res = await fetch('/api/delete-gestor', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await authHeaders(),
     body: JSON.stringify({ userId }),
   });
   const result = await res.json();
@@ -802,7 +930,7 @@ export async function deleteGestor(userId: string): Promise<void> {
 export async function updateGestorRole(userId: string, role: string, gymIds?: string[]): Promise<void> {
   const res = await fetch('/api/update-gestor', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await authHeaders(),
     body: JSON.stringify({ userId, role, gymIds }),
   });
   const result = await res.json();

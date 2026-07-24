@@ -31,8 +31,8 @@ export default function PendingPage() {
             <p className="text-[#8E8E93]">Hola, <span className="text-white">{currentUser.name}</span></p>
           )}
           <p className="text-[#8E8E93] text-sm leading-relaxed">
-            Tu cuenta está lista. Para acceder al panel necesitas que el responsable de tu club
-            te asigne desde su panel de administración.
+            Tu cuenta está lista, pero todavía no está asignada a ningún club.
+            El equipo de Hoop Slam completará la asignación.
           </p>
         </div>
 
@@ -40,9 +40,9 @@ export default function PendingPage() {
         <div className="bg-[#1C1C1E] border border-[#2C2C2E] rounded-2xl p-5 text-left space-y-4">
           <p className="text-xs text-[#636366] uppercase font-medium">Próximos pasos</p>
           {[
-            { n: 1, text: 'Comunica tu email al responsable de tu club' },
-            { n: 2, text: 'El responsable te asignará al panel desde Admin → Gestores' },
-            { n: 3, text: 'Recibirás acceso automáticamente al iniciar sesión' },
+            { n: 1, text: 'Comunica tu email al equipo de Hoop Slam o al responsable de tu club' },
+            { n: 2, text: 'Un administrador te asignará a tu club' },
+            { n: 3, text: 'Vuelve a iniciar sesión y tendrás acceso al panel' },
           ].map(({ n, text }) => (
             <div key={n} className="flex items-start gap-3">
               <div className="w-6 h-6 rounded-full bg-[#7BFF00]/10 border border-[#7BFF00]/30 flex items-center justify-center flex-shrink-0 mt-0.5">

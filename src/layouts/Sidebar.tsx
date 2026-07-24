@@ -6,19 +6,21 @@ import {
   ChevronRight,
   Calendar,
   Building2,
-  ArrowLeft,
   Users,
   Shield,
+  Wrench,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useGymLayout } from './GymLayout';
 import { useTheme } from '../contexts/ThemeContext';
+import { usePermissions } from '../hooks/usePermissions';
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { gym, gymId } = useGymLayout();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { isAdmin } = usePermissions();
   const isLight = theme === 'light';
 
   const prefix = `/gym/${gymId}`;
@@ -27,8 +29,9 @@ export default function Sidebar() {
     { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: 'Dashboard', show: true },
     { to: `${prefix}/courts`, icon: MapPin, label: 'Cestas', show: true },
     { to: `${prefix}/reservations`, icon: Calendar, label: 'Reservas', show: true },
+    { to: `${prefix}/maintenance`, icon: Wrench, label: 'Incidencias', show: true },
     { to: `${prefix}/users`, icon: Users, label: 'Usuarios', show: true },
-    { to: `${prefix}/gestores`, icon: Shield, label: 'Gestores', show: true },
+    { to: `${prefix}/gestores`, icon: Shield, label: 'Gestores', show: isAdmin },
     { to: `${prefix}/profile`, icon: Building2, label: 'Perfil Club', show: true },
   ];
 
@@ -57,17 +60,6 @@ export default function Sidebar() {
           </div>
         )}
       </div>
-
-      {/* Back to gym list */}
-      {!collapsed && (
-        <button
-          onClick={() => navigate('/')}
-          className="flex items-center gap-2 mx-2 mt-2 px-3 py-2 rounded-xl text-xs text-[#636366] hover:text-white hover:bg-[#1C1C1E] transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Cambiar gimnasio
-        </button>
-      )}
 
       {/* Navigation */}
       <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">

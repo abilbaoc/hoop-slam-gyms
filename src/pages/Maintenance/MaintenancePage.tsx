@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Wrench, AlertTriangle, Clock, CheckCircle, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import Card from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { useGym } from '../../contexts/GymContext';
-import { getMaintenanceTickets, getMaintenanceStats, getCourts, getUsers } from '../../data/api';
+import LoadErrorState from '../../components/shared/LoadErrorState';
+import { useGymLayout } from '../../layouts/GymLayout';
+import { getMaintenanceTickets, getMaintenanceStats, getCourts, getUsers, updateMaintenanceTicketStatus, addMaintenanceComment } from '../../data/api';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useAuth } from '../../contexts/AuthContext';
 import type { TicketStatus, MaintenanceLog } from '../../types/maintenance';
 import type { MaintenanceTicketWithHoop } from '../../types/maintenance-hoop';
 import type { Court } from '../../types/court';
@@ -21,7 +24,8 @@ interface MaintenanceStats {
 }
 
 export default function MaintenancePage() {
-  const { currentGym } = useGym();
+  const { gym: currentGym } = useGymLayout();
+  const { currentUser } = useAuth();
   const { canManageMaintenance } = usePermissions();
   const [tickets, setTickets] = useState<MaintenanceTicketWithHoop[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
@@ -39,17 +43,28 @@ export default function MaintenancePage() {
   const [selectedTicket, setSelectedTicket] = useState<MaintenanceTicketWithHoop | null>(null);
 
   const gymId = currentGym?.id;
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!gymId) return;
-    getMaintenanceTickets(gymId).then(({ tickets: t, logs: l }) => {
+    setLoadError(false);
+    Promise.all([
+      getMaintenanceTickets(gymId),
+      getMaintenanceStats(gymId),
+      getCourts(gymId),
+      getUsers(gymId),
+    ]).then(([{ tickets: t, logs: l }, s, cs, us]) => {
       setTickets(t);
       setLogs(l);
+      setStats(s);
+      setCourts(cs);
+      setUsers(us);
+    }).catch((err) => {
+      console.error('[Maintenance] load:', err);
+      setLoadError(true);
     });
-    getMaintenanceStats(gymId).then(setStats);
-    getCourts(gymId).then(setCourts);
-    getUsers(gymId).then(setUsers);
-  }, [gymId]);
+  }, [gymId, reloadKey]);
 
   const courtMap = Object.fromEntries(courts.map((c) => [c.id, c.name]));
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.name]));
@@ -64,22 +79,39 @@ export default function MaintenancePage() {
     setTickets((prev) => [ticket, ...prev]);
   };
 
-  const handleStatusUpdate = (ticketId: string, status: TicketStatus) => {
+  const handleStatusUpdate = async (ticketId: string, status: TicketStatus) => {
+    const userId = currentUser?.id ?? 'unknown';
+    try {
+      await updateMaintenanceTicketStatus(ticketId, status, userId);
+    } catch (err) {
+      console.error('[MaintenancePage] updateMaintenanceTicketStatus:', err);
+      toast.error(err instanceof Error ? err.message : 'No se pudo actualizar la incidencia');
+      return;
+    }
+    const now = new Date().toISOString();
     setTickets((prev) =>
       prev.map((t) =>
         t.id === ticketId
-          ? { ...t, status, updatedAt: new Date().toISOString(), resolvedAt: status === 'resolved' || status === 'closed' ? new Date().toISOString() : t.resolvedAt }
+          ? { ...t, status, updatedAt: now, resolvedAt: status === 'resolved' || status === 'closed' ? now : t.resolvedAt }
           : t
       )
     );
-    const now = new Date().toISOString();
-    setLogs((prev) => [...prev, { id: `mlog-${Date.now()}`, ticketId, action: 'status_changed', userId: 'user-001', comment: `Estado cambiado a ${status}`, timestamp: now }]);
+    setLogs((prev) => [...prev, { id: `mlog-${Date.now()}`, ticketId, action: 'status_changed', userId, comment: `Estado cambiado a ${status}`, timestamp: now }]);
     setSelectedTicket((prev) => prev && prev.id === ticketId ? { ...prev, status, updatedAt: now } : prev);
+    toast.success('Estado actualizado');
   };
 
-  const handleComment = (ticketId: string, comment: string) => {
+  const handleComment = async (ticketId: string, comment: string) => {
+    const userId = currentUser?.id ?? 'unknown';
+    try {
+      await addMaintenanceComment(ticketId, userId, comment);
+    } catch (err) {
+      console.error('[MaintenancePage] addMaintenanceComment:', err);
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar el comentario');
+      return;
+    }
     const now = new Date().toISOString();
-    setLogs((prev) => [...prev, { id: `mlog-${Date.now()}`, ticketId, action: 'commented', userId: 'user-001', comment, timestamp: now }]);
+    setLogs((prev) => [...prev, { id: `mlog-${Date.now()}`, ticketId, action: 'commented', userId, comment, timestamp: now }]);
     setTickets((prev) => prev.map((t) => t.id === ticketId ? { ...t, updatedAt: now } : t));
   };
 
@@ -148,6 +180,9 @@ export default function MaintenancePage() {
           ))}
         </select>
       </div>
+
+      {/* Error de carga */}
+      {loadError && <LoadErrorState onRetry={() => setReloadKey(k => k + 1)} />}
 
       {/* Ticket list */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

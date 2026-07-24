@@ -12,7 +12,6 @@ import UsersPage from './pages/Users/UsersPage';
 import ReservationsPage from './pages/Reservations/ReservationsPage';
 import GestoresPage from './pages/Gestores/GestoresPage';
 import MaintenancePage from './pages/Maintenance/MaintenancePage';
-import OnboardingPage from './pages/Onboarding/OnboardingPage';
 import PrivacyPolicyPage from './pages/Privacy/PrivacyPolicyPage';
 import NotificationsPage from './pages/Notifications/NotificationsPage';
 import AdminClubsPage from './pages/Admin/AdminClubsPage';
@@ -32,10 +31,8 @@ function RootRedirect() {
   if (currentUser?.gymIds && currentUser.gymIds.length > 0)
     return <Navigate to={`/gym/${currentUser.gymIds[0]}/dashboard`} replace />;
 
-  if (currentUser?.role === 'staff') return <Navigate to="/pending" replace />;
-
-  // No gymIds assigned — go to default gym (Laietà) instead of onboarding
-  return <Navigate to="/gym/laieta/dashboard" replace />;
+  // No gymIds assigned — wait until an admin assigns this user to a club
+  return <Navigate to="/pending" replace />;
 }
 
 /** Guard: solo usuarios con role === 'admin' pueden acceder a rutas /admin/* */
@@ -46,13 +43,20 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Guard: rutas dentro de un gym reservadas a admins (p. ej. gestores). */
+function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { currentUser } = useAuth();
+  if (currentUser?.role !== 'admin') return <Navigate to="dashboard" replace />;
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<Navigate to="/login" replace />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
-      <Route path="/onboarding" element={<OnboardingPage />} />
+      <Route path="/onboarding" element={<Navigate to="/" replace />} />
       <Route path="/pending" element={<PendingPage />} />
       <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route path="/" element={<RootRedirect />} />
@@ -67,7 +71,7 @@ function AppRoutes() {
         <Route path="courts/:id" element={<CourtDetailPage />} />
         <Route path="reservations" element={<ReservationsPage />} />
         <Route path="users" element={<UsersPage />} />
-        <Route path="gestores" element={<GestoresPage />} />
+        <Route path="gestores" element={<AdminOnlyRoute><GestoresPage /></AdminOnlyRoute>} />
         <Route path="profile" element={<GymProfilePage />} />
         <Route path="maintenance" element={<MaintenancePage />} />
         <Route path="notifications" element={<NotificationsPage />} />

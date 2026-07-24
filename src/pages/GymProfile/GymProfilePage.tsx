@@ -1,17 +1,23 @@
 import { useState, useEffect } from 'react';
 import { MapPin, Phone, Mail, Clock, Edit2, Hash, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Gym } from '../../types/gym';
-import { getGymById, updateGym } from '../../data/api';
-import { useGym } from '../../contexts/GymContext';
+import type { Gym, GymOpeningHours } from '../../types/gym';
+import { getGymById, updateGym, getCourts } from '../../data/api';
+import { useGymLayout } from '../../layouts/GymLayout';
 import { usePermissions } from '../../hooks/usePermissions';
 import Card from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 
+const DEFAULT_HOURS: GymOpeningHours = {
+  weekdayOpen: '09:00', weekdayClose: '21:00',
+  weekendOpen: '10:00', weekendClose: '20:00',
+};
+
 export default function GymProfilePage() {
-  const { currentGym } = useGym();
+  const { gym: currentGym } = useGymLayout();
   const { canEditGymProfile } = usePermissions();
-  const [gym, setGym] = useState<Gym | null>(null);
+  const [gym, setGym] = useState<Gym | null | undefined>(undefined); // undefined=cargando, null=no encontrado
+  const [courtCount, setCourtCount] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
 
   // Edit form state
@@ -20,13 +26,20 @@ export default function GymProfilePage() {
   const [city, setCity] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [hours, setHours] = useState<GymOpeningHours>(DEFAULT_HOURS);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (currentGym) {
-      getGymById(currentGym.id).then((g) => {
-        if (g) setGym(g);
-      });
+      getGymById(currentGym.id)
+        .then((g) => setGym(g ?? null))
+        .catch((err) => {
+          console.error('[GymProfile] getGymById:', err);
+          setGym(null);
+        });
+      getCourts(currentGym.id)
+        .then((cs) => setCourtCount(cs.length))
+        .catch(() => setCourtCount(null));
     }
   }, [currentGym]);
 
@@ -37,6 +50,7 @@ export default function GymProfilePage() {
     setCity(gym.city);
     setPhone(gym.phone);
     setEmail(gym.email);
+    setHours(gym.openingHours ?? DEFAULT_HOURS);
     setEditing(true);
   };
 
@@ -49,24 +63,36 @@ export default function GymProfilePage() {
     if (!name.trim()) return toast.error('El nombre es obligatorio');
     setSaving(true);
     try {
-      const updated = await updateGym(gym.id, { name, address, city, phone, email });
+      const updated = await updateGym(gym.id, { name, address, city, phone, email, openingHours: hours });
       setGym(updated);
       setEditing(false);
       toast.success('Perfil actualizado');
-    } catch {
-      toast.error('Error al guardar');
+    } catch (err) {
+      console.error('[GymProfile] updateGym:', err);
+      toast.error(err instanceof Error ? err.message : 'Error al guardar');
     } finally {
       setSaving(false);
     }
   };
 
-  if (!gym) {
+  if (gym === undefined) {
     return (
       <div className="flex items-center justify-center h-64">
         <p className="text-[#8E8E93]">Cargando perfil...</p>
       </div>
     );
   }
+
+  if (gym === null) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-center">
+        <p className="text-white font-medium">No se pudo cargar el perfil del club</p>
+        <p className="text-sm text-[#8E8E93] mt-2">Recarga la página o inténtalo más tarde.</p>
+      </div>
+    );
+  }
+
+  const openingHours = gym.openingHours ?? DEFAULT_HOURS;
 
   const initials = gym.name
     .split(' ')
@@ -174,29 +200,50 @@ export default function GymProfilePage() {
           <Clock size={16} className="text-[#7BFF00]" />
           <h2 className="text-lg font-semibold text-white">Horario de apertura</h2>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[#636366] text-xs border-b border-[#2C2C2E]">
-                <th className="text-left py-2 font-medium">Periodo</th>
-                <th className="text-left py-2 font-medium">Apertura</th>
-                <th className="text-left py-2 font-medium">Cierre</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-[#2C2C2E]">
-                <td className="py-3 text-white">Lunes a Viernes</td>
-                <td className="py-3 text-[#8E8E93]">{gym.openingHours.weekdayOpen}</td>
-                <td className="py-3 text-[#8E8E93]">{gym.openingHours.weekdayClose}</td>
-              </tr>
-              <tr>
-                <td className="py-3 text-white">Fines de semana</td>
-                <td className="py-3 text-[#8E8E93]">{gym.openingHours.weekendOpen}</td>
-                <td className="py-3 text-[#8E8E93]">{gym.openingHours.weekendClose}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        {editing ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-[#8E8E93] mb-1 block">Lunes a Viernes — Apertura</label>
+              <input type="time" className={inputClass} value={hours.weekdayOpen} onChange={e => setHours(h => ({ ...h, weekdayOpen: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs text-[#8E8E93] mb-1 block">Lunes a Viernes — Cierre</label>
+              <input type="time" className={inputClass} value={hours.weekdayClose} onChange={e => setHours(h => ({ ...h, weekdayClose: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs text-[#8E8E93] mb-1 block">Fines de semana — Apertura</label>
+              <input type="time" className={inputClass} value={hours.weekendOpen} onChange={e => setHours(h => ({ ...h, weekendOpen: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs text-[#8E8E93] mb-1 block">Fines de semana — Cierre</label>
+              <input type="time" className={inputClass} value={hours.weekendClose} onChange={e => setHours(h => ({ ...h, weekendClose: e.target.value }))} />
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[#636366] text-xs border-b border-[#2C2C2E]">
+                  <th className="text-left py-2 font-medium">Periodo</th>
+                  <th className="text-left py-2 font-medium">Apertura</th>
+                  <th className="text-left py-2 font-medium">Cierre</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-[#2C2C2E]">
+                  <td className="py-3 text-white">Lunes a Viernes</td>
+                  <td className="py-3 text-[#8E8E93]">{openingHours.weekdayOpen}</td>
+                  <td className="py-3 text-[#8E8E93]">{openingHours.weekdayClose}</td>
+                </tr>
+                <tr>
+                  <td className="py-3 text-white">Fines de semana</td>
+                  <td className="py-3 text-[#8E8E93]">{openingHours.weekendOpen}</td>
+                  <td className="py-3 text-[#8E8E93]">{openingHours.weekendClose}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       {/* Stats Card */}
@@ -205,11 +252,9 @@ export default function GymProfilePage() {
           <Hash size={16} className="text-[#7BFF00]" />
           <h2 className="text-lg font-semibold text-white">Estadisticas rapidas</h2>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <div>
-            <p className="text-xs text-[#636366]">Cestas</p>
-            <p className="text-2xl font-bold text-[#7BFF00]">{gym.courts.length}</p>
-          </div>
+        <div>
+          <p className="text-xs text-[#636366]">Cestas del club</p>
+          <p className="text-2xl font-bold text-[#7BFF00]">{courtCount ?? '—'}</p>
         </div>
       </Card>
     </div>

@@ -390,6 +390,11 @@ export async function fbUpdateCourt(courtId: string, data: Partial<Court>): Prom
   }
 }
 
+export async function fbDeleteCourt(courtId: string): Promise<void> {
+  await ensureFirebaseAuth();
+  await deleteDoc(doc(getDb(), 'courts', courtId));
+}
+
 // ── Paso 2: Court blocks (new collection court_blocks) ────────────────────
 
 export interface FirebaseCourtBlock {

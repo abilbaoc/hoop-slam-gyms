@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { Shield, UserPlus, Mail, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
@@ -7,28 +6,26 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { toast } from 'sonner';
 import { getUsers, inviteGestor, deleteGestor, updateGestorRole } from '../../data/api';
-import { addAllowedEmail, useAuth } from '../../contexts/AuthContext';
-import { useGym } from '../../contexts/GymContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useGymLayout } from '../../layouts/GymLayout';
 import type { AppUser } from '../../types/auth';
 
-type DisplayRole = 'admin' | 'gestor' | 'viewer';
+type DisplayRole = 'admin' | 'gestor' | 'staff';
 
 const ROLE_LABEL: Record<string, string> = {
   admin: 'Administrador',
   gestor: 'Gestor',
   staff: 'Staff',
-  viewer: 'Solo lectura',
 };
 const ROLE_COLOR: Record<string, 'green' | 'blue' | 'gray'> = {
   admin: 'green',
   gestor: 'blue',
   staff: 'gray',
-  viewer: 'gray',
 };
 const ROLE_DESC: Record<string, string> = {
   admin: 'Acceso total: config cestas, bloquear slots, gestionar incidencias y usuarios',
   gestor: 'Puede ver datos, bloquear slots y gestionar incidencias',
-  viewer: 'Solo puede ver datos del dashboard, sin modificar nada',
+  staff: 'Gestiona las reservas del club, sin acceso a configuracion',
 };
 
 function displayRoleFor(role: string): string {
@@ -37,7 +34,7 @@ function displayRoleFor(role: string): string {
 
 export default function GestoresPage() {
   const { currentUser } = useAuth();
-  const { currentGym } = useGym();
+  const { gym: currentGym } = useGymLayout();
 
   const [gestores, setGestores] = useState<AppUser[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(true);
@@ -85,14 +82,13 @@ export default function GestoresPage() {
     setIsInviting(true);
     try {
       const created = await inviteGestor({ email, name, role: inviteRole, gymIds, password: invitePassword });
-      addAllowedEmail(email);
       setGestores((prev) => [
         ...prev,
         {
           id: created.id,
           email: created.email,
           name: created.name,
-          role: created.role === 'viewer' ? 'staff' : (created.role as AppUser['role']),
+          role: created.role as AppUser['role'],
           gymIds: created.gymIds,
           permissions: [],
           lastActiveAt: new Date().toISOString(),
@@ -147,9 +143,6 @@ export default function GestoresPage() {
 
   const inputClass = 'w-full bg-[#2C2C2E] text-white text-sm rounded-xl px-4 py-2.5 border border-[#2C2C2E] outline-none focus:border-[#7BFF00] placeholder-[#636366]';
 
-  // Gap 3: solo admins (después de todos los hooks)
-  if (currentUser?.role !== 'admin') return <Navigate to="/" replace />;
-
   const userToDelete = gestores.find((g) => g.id === confirmDeleteId);
 
   return (
@@ -180,7 +173,7 @@ export default function GestoresPage() {
 
       {/* Roles explanation */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {(['admin', 'gestor', 'viewer'] as const).map((role) => (
+        {(['admin', 'gestor', 'staff'] as const).map((role) => (
           <div key={role} className="bg-[#1C1C1E] border border-[#2C2C2E] rounded-xl px-4 py-3">
             <div className="flex items-center gap-2 mb-1">
               <Badge variant={ROLE_COLOR[role]}>{ROLE_LABEL[role]}</Badge>
@@ -200,7 +193,8 @@ export default function GestoresPage() {
         ) : gestores.length === 0 ? (
           <div className="text-center py-12 text-[#636366] text-sm">No hay gestores configurados</div>
         ) : (
-          <table className="w-full text-left">
+          <div className="overflow-x-auto">
+          <table className="w-full text-left min-w-[560px]">
             <thead>
               <tr className="border-b border-[#2C2C2E]">
                 {['Nombre', 'Email', 'Rol', 'Acciones'].map((col) => (
@@ -235,7 +229,7 @@ export default function GestoresPage() {
                         onBlur={() => setEditingRoleId(null)}
                       >
                         <option value="gestor">Gestor</option>
-                        <option value="staff">Solo lectura</option>
+                        <option value="staff">Staff</option>
                       </select>
                     ) : (
                       <button
@@ -265,6 +259,7 @@ export default function GestoresPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
 
@@ -306,7 +301,7 @@ export default function GestoresPage() {
             <label className="text-xs text-[#8E8E93] mb-1 block">Rol</label>
             <select className={inputClass} value={inviteRole} onChange={(e) => setInviteRole(e.target.value as DisplayRole)} disabled={isInviting}>
               <option value="gestor">Gestor — puede modificar</option>
-              <option value="viewer">Solo lectura — solo ver datos</option>
+              <option value="staff">Staff — gestiona reservas</option>
               <option value="admin">Administrador — acceso total</option>
             </select>
           </div>

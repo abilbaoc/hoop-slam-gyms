@@ -9,6 +9,8 @@ import type { TicketPriority } from '../../types/maintenance';
 import type { MaintenanceTicketWithHoop } from '../../types/maintenance-hoop';
 import { needsHoopNotification } from '../../types/maintenance-hoop';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { createMaintenanceTicket } from '../../data/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface CreateTicketModalProps {
   isOpen: boolean;
@@ -20,6 +22,7 @@ interface CreateTicketModalProps {
 }
 
 export default function CreateTicketModal({ isOpen, onClose, courts, users, gymId, onCreated }: CreateTicketModalProps) {
+  const { currentUser } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [courtId, setCourtId] = useState('');
@@ -30,37 +33,39 @@ export default function CreateTicketModal({ isOpen, onClose, courts, users, gymI
 
   const autoNotifies = needsHoopNotification({ priority });
 
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setCourtId('');
+    setPriority('medium');
+    setAssignedTo('');
+    setNotifyHoop(false);
+  };
+
   const handleSubmit = async () => {
     if (!title.trim() || !courtId || isSubmitting) return;
     setIsSubmitting(true);
 
-    const now = new Date().toISOString();
     const willNotify = autoNotifies || notifyHoop;
 
-    const ticket: MaintenanceTicketWithHoop = {
-      id: `maint-${Date.now()}`,
-      courtId,
-      gymId,
-      title: title.trim(),
-      description: description.trim(),
-      priority,
-      status: 'open',
-      assignedTo: assignedTo || null,
-      createdBy: 'user-001',
-      createdAt: now,
-      updatedAt: now,
-      resolvedAt: null,
-      hoopStatus: willNotify ? 'pending' : null,
-      hoopAssignedTo: null,
-      hoopNotes: null,
-      notifiedAt: willNotify ? now : null,
-    };
+    try {
+      // Persistir primero: el id real (uuid) lo genera la base de datos
+      const ticket = await createMaintenanceTicket({
+        courtId,
+        gymId,
+        title: title.trim(),
+        description: description.trim(),
+        priority,
+        createdBy: currentUser?.id ?? 'unknown',
+        assignedTo: assignedTo || null,
+        hoopStatus: willNotify ? 'pending' : null,
+        notifiedAt: willNotify ? new Date().toISOString() : null,
+      });
 
-    onCreated(ticket);
+      onCreated(ticket);
 
-    // Llamar Edge Function si corresponde
-    if (willNotify) {
-      if (isSupabaseConfigured && supabase) {
+      // Notificar a Hoop DESPUÉS del insert, con el uuid real
+      if (willNotify && isSupabaseConfigured && supabase) {
         try {
           await supabase.functions.invoke('notify-hoop-on-ticket', {
             body: { ticket_id: ticket.id },
@@ -69,29 +74,25 @@ export default function CreateTicketModal({ isOpen, onClose, courts, users, gymI
           // Graceful: el ticket ya fue creado, el fallo de notificacion no lo bloquea
           console.warn('[CreateTicketModal] Edge Function notify-hoop-on-ticket fallo:', err);
         }
-      } else {
-        // Mock mode: simular notificacion
-        console.log(`[CreateTicketModal] Mock mode: notificacion Hoop simulada para ticket ${ticket.id} (${priority})`);
       }
 
-      const toastMsg = priority === 'critical'
-        ? 'Ticket creado. El equipo tecnico de Hoop Slam ha sido notificado.'
-        : 'Ticket creado. Hoop Slam ha sido notificado.';
-      const toastDuration = priority === 'critical' ? 5000 : 4000;
-      toast.success(toastMsg, { duration: toastDuration });
-    } else {
-      toast.success('Ticket creado correctamente.', { duration: 3000 });
-    }
+      if (willNotify) {
+        const toastMsg = priority === 'critical'
+          ? 'Ticket creado. El equipo tecnico de Hoop Slam ha sido notificado.'
+          : 'Ticket creado. Hoop Slam ha sido notificado.';
+        toast.success(toastMsg, { duration: priority === 'critical' ? 5000 : 4000 });
+      } else {
+        toast.success('Ticket creado correctamente.', { duration: 3000 });
+      }
 
-    // Reset form
-    setTitle('');
-    setDescription('');
-    setCourtId('');
-    setPriority('medium');
-    setAssignedTo('');
-    setNotifyHoop(false);
-    setIsSubmitting(false);
-    onClose();
+      resetForm();
+      onClose();
+    } catch (err) {
+      console.error('[CreateTicketModal] createMaintenanceTicket:', err);
+      toast.error(err instanceof Error ? err.message : 'No se pudo crear la incidencia');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const inputClass = 'w-full bg-[#2C2C2E] text-white text-sm rounded-xl px-4 py-2.5 border border-[#2C2C2E] outline-none focus:border-[#7BFF00] placeholder-[#636366]';

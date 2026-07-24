@@ -22,7 +22,7 @@ export function useGymLayout() {
 
 export default function GymLayout() {
   const { gymId } = useParams<{ gymId: string }>();
-  const { isAuthenticated, currentUser, updateUserGymIds } = useAuth();
+  const { isAuthenticated, currentUser, updateUserGymIds, canAccessGym } = useAuth();
   const [gym, setGym] = useState<Gym | null | undefined>(undefined); // undefined=loading, null=not found
 
   useEffect(() => {
@@ -53,6 +53,8 @@ export default function GymLayout() {
     if (currentUser?.role === 'staff') return <Navigate to="/pending" replace />;
     return <Navigate to="/login" replace />;
   }
+
+  if (!canAccessGym(gym.id)) return <Navigate to="/" replace />;
 
   return (
     <GymLayoutContext.Provider value={{ gym, gymId: gym.id }}>
