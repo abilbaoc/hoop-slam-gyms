@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireUser, isAuthFailure } from './_auth';
+import { requireUser, isAuthFailure } from './_auth.js';
 
 /**
  * Issues a Firebase custom token for any authenticated dashboard user, so the
