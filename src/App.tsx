@@ -1,25 +1,37 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import GymLayout from './layouts/GymLayout';
 import AdminLayout from './layouts/AdminLayout';
-import OverviewPage from './pages/Overview/OverviewPage';
-import CourtsPage from './pages/Courts/CourtsPage';
-import CourtDetailPage from './pages/Courts/CourtDetailPage';
 import LoginPage from './pages/Auth/LoginPage';
 import AuthCallbackPage from './pages/Auth/AuthCallbackPage';
 import PendingPage from './pages/Auth/PendingPage';
-import GymProfilePage from './pages/GymProfile/GymProfilePage';
-import UsersPage from './pages/Users/UsersPage';
-import ReservationsPage from './pages/Reservations/ReservationsPage';
-import GestoresPage from './pages/Gestores/GestoresPage';
-import MaintenancePage from './pages/Maintenance/MaintenancePage';
-import PrivacyPolicyPage from './pages/Privacy/PrivacyPolicyPage';
-import NotificationsPage from './pages/Notifications/NotificationsPage';
-import AdminClubsPage from './pages/Admin/AdminClubsPage';
-import AdminGestoresPage from './pages/Admin/AdminGestoresPage';
 import CookieBanner from './components/ui/CookieBanner';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+
+// Páginas con code-splitting: cada una va en su propio chunk (recharts solo
+// se descarga al entrar en el Dashboard, no en el login).
+const OverviewPage = lazy(() => import('./pages/Overview/OverviewPage'));
+const CourtsPage = lazy(() => import('./pages/Courts/CourtsPage'));
+const CourtDetailPage = lazy(() => import('./pages/Courts/CourtDetailPage'));
+const GymProfilePage = lazy(() => import('./pages/GymProfile/GymProfilePage'));
+const UsersPage = lazy(() => import('./pages/Users/UsersPage'));
+const ReservationsPage = lazy(() => import('./pages/Reservations/ReservationsPage'));
+const GestoresPage = lazy(() => import('./pages/Gestores/GestoresPage'));
+const MaintenancePage = lazy(() => import('./pages/Maintenance/MaintenancePage'));
+const PrivacyPolicyPage = lazy(() => import('./pages/Privacy/PrivacyPolicyPage'));
+const NotificationsPage = lazy(() => import('./pages/Notifications/NotificationsPage'));
+const AdminClubsPage = lazy(() => import('./pages/Admin/AdminClubsPage'));
+const AdminGestoresPage = lazy(() => import('./pages/Admin/AdminGestoresPage'));
+
+function RouteFallback() {
+  return (
+    <div className="min-h-[40vh] flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-[#7BFF00] border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function RootRedirect() {
   const { isAuthenticated, currentUser } = useAuth();
@@ -52,6 +64,7 @@ function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   return (
+    <Suspense fallback={<RouteFallback />}>
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<Navigate to="/login" replace />} />
@@ -78,6 +91,7 @@ function AppRoutes() {
         <Route index element={<Navigate to="dashboard" replace />} />
       </Route>
     </Routes>
+    </Suspense>
   );
 }
 

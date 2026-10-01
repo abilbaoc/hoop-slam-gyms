@@ -23,6 +23,8 @@ import {
   where,
   Timestamp,
   serverTimestamp,
+  type QuerySnapshot,
+  type DocumentData,
 } from 'firebase/firestore';
 import { getDb, ensureFirebaseAuth } from '../lib/firebase';
 import type { Gym } from '../types/gym';
@@ -30,7 +32,6 @@ import type { Court } from '../types';
 import type { Match, MatchFormat } from '../types';
 import type { Reservation, ReservationStatus } from '../types';
 import type { ClubMember } from '../types/club_member';
-import type { StatsOverview, DailyStats } from '../types/stats';
 
 // ── Virtual gym — all courts belong to Laietà for now ─────────────────────
 const LAIETA_GYM_ID = 'laieta';
@@ -147,9 +148,22 @@ export async function fbGetMatches(filters?: {
 
   let results: Match[] = [];
 
+  // Las subcolecciones games se consultan en paralelo (lotes de 20) en lugar
+  // de secuencialmente: con N reservas el coste pasa de N round-trips en serie
+  // a ceil(N/20) tandas concurrentes.
+  const BATCH = 20;
+  const gamesSnaps = new Map<string, QuerySnapshot<DocumentData>>();
+  for (let i = 0; i < resSnap.docs.length; i += BATCH) {
+    const batch = resSnap.docs.slice(i, i + BATCH);
+    const snaps = await Promise.all(
+      batch.map(rDoc => getDocs(collection(getDb(), 'reservations', rDoc.id, 'games'))),
+    );
+    batch.forEach((rDoc, j) => gamesSnaps.set(rDoc.id, snaps[j]));
+  }
+
   for (const rDoc of resSnap.docs) {
     const rData = rDoc.data();
-    const gamesSnap = await getDocs(collection(getDb(), 'reservations', rDoc.id, 'games'));
+    const gamesSnap = gamesSnaps.get(rDoc.id)!;
     if (gamesSnap.empty) continue;
 
     // Extract player nicknames from reservation's embedded team data
@@ -282,43 +296,6 @@ export async function fbGetClubMembers(_gymId: string): Promise<ClubMember[]> {
         winPercentage: stats?.winPercentage,
       } satisfies ClubMember;
     });
-}
-
-// ── Stats ─────────────────────────────────────────────────────────────────
-
-export async function fbGetStatsOverview(_gymId: string, _courtIds: string[]): Promise<StatsOverview> {
-  const reservations = await fbGetReservations({});
-  const matches = await fbGetMatches({});
-
-  return {
-    reservas_hechas: reservations.filter(r => r.status === 'confirmed').length,
-    reservas_iniciadas: reservations.filter(r => {
-      if (r.status !== 'confirmed') return false;
-      return new Date(`${r.date}T${r.startTime}`) <= new Date();
-    }).length,
-    reservas_canceladas: reservations.filter(r => r.status === 'cancelled').length,
-    partidos_jugados: matches.length,
-    partidos_cancelados: 0,
-  };
-}
-
-export async function fbGetDailyStats(_gymId: string, _courtIds: string[], days: number): Promise<DailyStats[]> {
-  const [reservations, matches] = await Promise.all([
-    fbGetReservations({}),
-    fbGetMatches({ days }),
-  ]);
-
-  const result: DailyStats[] = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 86400000);
-    const dateStr = d.toISOString().slice(0, 10);
-    result.push({
-      date: dateStr,
-      reservations: reservations.filter(r => r.date === dateStr).length,
-      matches: matches.filter(m => m.startedAt.slice(0, 10) === dateStr).length,
-    });
-  }
-  return result;
 }
 
 // ══════════════════════════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Bell, Wrench, Calendar, AlertTriangle, Info, CheckCheck } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../../data/api';
@@ -31,16 +31,17 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
-    if (!currentGym?.id) return;
+  const gymId = currentGym?.id;
+  const load = useCallback(() => {
+    if (!gymId) return;
     setLoading(true);
-    getNotifications(currentGym.id)
+    getNotifications(gymId)
       .then(setNotifications)
       .catch(err => console.error('[Notifications] load:', err))
       .finally(() => setLoading(false));
-  };
+  }, [gymId]);
 
-  useEffect(() => { load(); }, [currentGym?.id]);
+  useEffect(() => { load(); }, [load]);
 
   const handleRead = async (id: string) => {
     await markNotificationRead(id);

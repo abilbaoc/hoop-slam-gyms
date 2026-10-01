@@ -2,16 +2,8 @@ import type {
   Court,
   Match,
   MatchFormat,
-  Player,
-  KPIData,
-  DailyMatches,
-  HourlyHeatmap,
-  FormatDistribution,
-  CourtOccupancy,
-  RecentMatch,
   Reservation,
   ReservationStatus,
-  AuditEntry,
 } from '../types';
 import type { Gym } from '../types/gym';
 import type { AppUser } from '../types/auth';
@@ -21,23 +13,13 @@ import type { AppNotification } from '../types/notification';
 
 import { courts } from './mock/courts';
 import { matches } from './mock/matches';
-import { players } from './mock/players';
-import {
-  getKPIs as computeKPIs,
-  getDailyMatches as computeDailyMatches,
-  getHourlyHeatmap as computeHourlyHeatmap,
-  getFormatDistribution as computeFormatDistribution,
-  getCourtOccupancy as computeCourtOccupancy,
-  getRecentMatches as computeRecentMatches,
-} from './mock/generators';
 import { reservations } from './mock/reservations';
 import { gyms } from './mock/gyms';
 import { users } from './mock/users';
-import { getAuditLog, addAuditEntry } from './mock/audit';
+import { addAuditEntry } from './mock/audit';
 import { maintenanceTicketsWithHoop as maintenanceTickets, maintenanceLogs } from './mock/maintenance-hoop';
 import type { CourtSlot } from '../types/slot';
 import type { ClubMember } from '../types/club_member';
-import type { StatsOverview, DailyStats } from '../types/stats';
 import { courtSlots as courtSlotsData } from './mock/court_slots';
 import { clubMembers as clubMembersData } from './mock/club_members';
 import { isFirebaseConfigured } from '../lib/firebase';
@@ -46,7 +28,7 @@ import type { GymOpeningHours } from '../types/gym';
 import {
   fbGetGyms, fbGetGymById, fbGetCourts,
   fbGetMatches, fbGetReservations,
-  fbGetClubMembers, fbGetStatsOverview, fbGetDailyStats,
+  fbGetClubMembers,
   fbCreateCourt, fbUpdateCourt, fbDeleteCourt,
   fbGetCourtBlocks, fbCreateCourtBlock, fbDeleteCourtBlock,
   fbGetCourtIncidents, fbCreateCourtIncident, fbUpdateCourtIncident,
@@ -181,59 +163,26 @@ export async function getMatches(filters?: {
   return result;
 }
 
-// ── Players ──
+// ── Court activity (partidos reales por canasta) ──
 
-export async function getPlayers(gymId?: string): Promise<Player[]> {
-  await delay();
-  if (!gymId) return players;
-  return players.filter((p) => p.gymId === gymId);
+export interface CourtActivity {
+  courtId: string;
+  matchesToday: number;
+  matchesWeek: number;
 }
 
-// ── Analytics ──
-
-export async function getKPIs(gymId?: string): Promise<KPIData> {
-  await delay();
-  const ids = getGymCourtIds(gymId);
-  const fc = ids ? courts.filter((c) => ids.has(c.id)) : courts;
-  const fm = ids ? matches.filter((m) => ids.has(m.courtId)) : matches;
-  return computeKPIs(fm, fc, players);
-}
-
-export async function getDailyMatchesData(days?: number, gymId?: string): Promise<DailyMatches[]> {
-  await delay();
-  const ids = getGymCourtIds(gymId);
-  const fm = ids ? matches.filter((m) => ids.has(m.courtId)) : matches;
-  return computeDailyMatches(fm, days);
-}
-
-export async function getHourlyHeatmapData(gymId?: string): Promise<HourlyHeatmap[]> {
-  await delay();
-  const ids = getGymCourtIds(gymId);
-  const fm = ids ? matches.filter((m) => ids.has(m.courtId)) : matches;
-  return computeHourlyHeatmap(fm);
-}
-
-export async function getFormatDistributionData(gymId?: string): Promise<FormatDistribution[]> {
-  await delay();
-  const ids = getGymCourtIds(gymId);
-  const fm = ids ? matches.filter((m) => ids.has(m.courtId)) : matches;
-  return computeFormatDistribution(fm);
-}
-
-export async function getCourtOccupancyData(gymId?: string): Promise<CourtOccupancy[]> {
-  await delay();
-  const ids = getGymCourtIds(gymId);
-  const fc = ids ? courts.filter((c) => ids.has(c.id)) : courts;
-  const fm = ids ? matches.filter((m) => ids.has(m.courtId)) : matches;
-  return computeCourtOccupancy(fm, fc);
-}
-
-export async function getRecentMatchesData(limit?: number, gymId?: string): Promise<RecentMatch[]> {
-  await delay();
-  const ids = getGymCourtIds(gymId);
-  const fc = ids ? courts.filter((c) => ids.has(c.id)) : courts;
-  const fm = ids ? matches.filter((m) => ids.has(m.courtId)) : matches;
-  return computeRecentMatches(fm, fc, limit);
+/** Actividad real por canasta (hoy y últimos 7 días) a partir de getMatches. */
+export async function getCourtActivity(gymId?: string): Promise<CourtActivity[]> {
+  const weekMatches = await getMatches({ gymId, days: 7 });
+  const today = new Date().toISOString().slice(0, 10);
+  const byCourt = new Map<string, CourtActivity>();
+  for (const m of weekMatches) {
+    const entry = byCourt.get(m.courtId) ?? { courtId: m.courtId, matchesToday: 0, matchesWeek: 0 };
+    entry.matchesWeek += 1;
+    if (m.startedAt.slice(0, 10) === today) entry.matchesToday += 1;
+    byCourt.set(m.courtId, entry);
+  }
+  return [...byCourt.values()];
 }
 
 // ── Reservations ──
@@ -255,13 +204,6 @@ export async function getReservations(filters?: {
   if (filters?.date) result = result.filter((r) => r.date === filters.date);
   if (filters?.status) result = result.filter((r) => r.status === filters.status);
   return result;
-}
-
-// ── Audit ──
-
-export async function getAuditEntries(gymId?: string): Promise<AuditEntry[]> {
-  await delay();
-  return getAuditLog(gymId);
 }
 
 // ── Users ──
@@ -639,56 +581,6 @@ export async function getMaintenanceStats(gymId: string): Promise<{
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const resolvedThisMonth = tickets.filter(t => t.resolvedAt && t.resolvedAt >= monthStart).length;
   return { open, critical, avgResolutionHours, resolvedThisMonth };
-}
-
-// ── Stats (new scope) ──
-
-export async function getStatsOverview(gymId: string): Promise<StatsOverview> {
-  if (USE_FIREBASE) {
-    try {
-      const courtIds = (await fbGetCourts(gymId)).map(c => c.id);
-      return await fbGetStatsOverview(gymId, courtIds);
-    } catch (e) { console.error('[Firebase] getStatsOverview:', e); throw new Error('No se pudieron cargar las estadisticas'); }
-  }
-  await delay();
-  const ids = getGymCourtIds(gymId);
-  const gymReservations = ids ? reservations.filter((r) => ids.has(r.courtId)) : reservations;
-  const gymMatches = ids ? matches.filter((m) => ids.has(m.courtId)) : matches;
-  const now = new Date();
-  return {
-    reservas_hechas: gymReservations.filter((r) => r.status === 'confirmed').length,
-    reservas_iniciadas: gymReservations.filter((r) => {
-      if (r.status !== 'confirmed') return false;
-      return new Date(`${r.date}T${r.startTime}`) <= now;
-    }).length,
-    reservas_canceladas: gymReservations.filter((r) => r.status === 'cancelled').length,
-    partidos_jugados: gymMatches.length,
-    partidos_cancelados: 0,
-  };
-}
-
-export async function getDailyStats(gymId: string, days: number): Promise<DailyStats[]> {
-  if (USE_FIREBASE) {
-    try {
-      const courtIds = (await fbGetCourts(gymId)).map(c => c.id);
-      return await fbGetDailyStats(gymId, courtIds, days);
-    } catch (e) { console.error('[Firebase] getDailyStats:', e); throw new Error('No se pudieron cargar las estadisticas diarias'); }
-  }
-  await delay();
-  const ids = getGymCourtIds(gymId);
-  const gymReservations = ids ? reservations.filter((r) => ids.has(r.courtId)) : reservations;
-  const gymMatches = ids ? matches.filter((m) => ids.has(m.courtId)) : matches;
-  const result: DailyStats[] = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 86400000);
-    const dateStr = d.toISOString().slice(0, 10);
-    result.push({
-      date: dateStr,
-      reservations: gymReservations.filter((r) => r.date === dateStr).length,
-      matches: gymMatches.filter((m) => m.startedAt.slice(0, 10) === dateStr).length,
-    });
-  }
-  return result;
 }
 
 // ── Court Slots (backed by Firebase court_blocks) ──

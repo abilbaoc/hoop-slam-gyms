@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Plus, Pencil, Trash2, Wifi, WifiOff } from 'lucide-react';
 import Card from '../../components/ui/Card';
@@ -6,15 +6,15 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import CourtStatusBadge from '../../components/shared/CourtStatusBadge';
-import { getCourts, getCourtOccupancyData, createCourt, updateCourt, deleteCourt } from '../../data/api';
-import type { Court, CourtOccupancy, CourtStatus } from '../../types';
+import { getCourts, getCourtActivity, createCourt, updateCourt, deleteCourt, type CourtActivity } from '../../data/api';
+import type { Court, CourtStatus } from '../../types';
 import { useGymLayout } from '../../layouts/GymLayout';
 import { usePermissions } from '../../hooks/usePermissions';
 import { toast } from 'sonner';
 
 export default function CourtsPage() {
   const [courts, setCourts] = useState<Court[]>([]);
-  const [occupancy, setOccupancy] = useState<CourtOccupancy[]>([]);
+  const [activity, setActivity] = useState<CourtActivity[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [editCourt, setEditCourt] = useState<Court | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Court | null>(null);
@@ -25,17 +25,22 @@ export default function CourtsPage() {
   const { gym: currentGym } = useGymLayout();
   const { canManageCourts } = usePermissions();
 
-  const loadData = () => {
-    getCourts(currentGym?.id).then(setCourts);
-    getCourtOccupancyData(currentGym?.id).then(setOccupancy);
-  };
+  const loadData = useCallback(() => {
+    getCourts(currentGym?.id).then(setCourts).catch((err) => {
+      console.error('[Courts] getCourts:', err);
+      toast.error('No se pudieron cargar las canastas');
+    });
+    getCourtActivity(currentGym?.id).then(setActivity).catch((err) => {
+      console.error('[Courts] getCourtActivity:', err);
+    });
+  }, [currentGym?.id]);
 
   useEffect(() => {
     loadData();
-  }, [currentGym?.id]);
+  }, [loadData]);
 
-  const getOccupancy = (courtId: string) =>
-    occupancy.find((o) => o.courtId === courtId);
+  const getActivity = (courtId: string) =>
+    activity.find((a) => a.courtId === courtId);
 
   const openCreate = () => {
     setFormName('');
@@ -128,7 +133,7 @@ export default function CourtsPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
         {courts.map((court) => {
-          const occ = getOccupancy(court.id);
+          const act = getActivity(court.id);
           return (
             <Card
               key={court.id}
@@ -177,13 +182,11 @@ export default function CourtsPage() {
               <div className="flex items-center justify-between pt-3 border-t border-[#2C2C2E]">
                 <div>
                   <p className="text-xs text-[#636366]">Partidos hoy</p>
-                  <p className="font-display text-2xl text-white leading-none">{occ?.matchesToday ?? 0}</p>
+                  <p className="font-display text-2xl text-white leading-none">{act?.matchesToday ?? 0}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-[#636366]">Ocupacion</p>
-                  <p className="font-display text-2xl text-[#7BFF00] leading-none">
-                    {occ ? `${Math.round(occ.occupancy)}%` : '-'}
-                  </p>
+                  <p className="text-xs text-[#636366]">Ultimos 7 dias</p>
+                  <p className="font-display text-2xl text-[#7BFF00] leading-none">{act?.matchesWeek ?? 0}</p>
                 </div>
               </div>
             </Card>
