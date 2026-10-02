@@ -25,7 +25,7 @@ Todo este bloque queda a la espera de quien tenga la cuenta de Google propietari
 - [x] `SUPABASE_ANON_KEY`: ya no hace falta — `api/_auth.ts` reutiliza `VITE_SUPABASE_ANON_KEY` (existente).
 - [x] `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` existen. (Vercel marca la service role key como "Needs Attention" porque es *Config* legible. Pasarla a *Secret* **exige un valor nuevo** — Vercel no deja convertir la actual —, o sea rotarla en Supabase → Settings → API. Pendiente, no bloquea.)
 - [x] **Eliminadas** `VITE_FIREBASE_AUTH_EMAIL` y `VITE_FIREBASE_AUTH_PASSWORD` (las públicas del bundle). El deploy actual sigue funcionando porque las lleva compiladas.
-- [ ] **Añadir 2 variables server-only** (sin prefijo `VITE_`, tipo *Secret*, entorno Production) — sustituyen al service account mientras no haya acceso a la cuenta propietaria de Firebase:
+- [x] **Añadir 2 variables server-only** (hecho por el usuario 2026-10-02; verificadas: Production, Secret, sin prefijo VITE_) (sin prefijo `VITE_`, tipo *Secret*, entorno Production) — sustituyen al service account mientras no haya acceso a la cuenta propietaria de Firebase:
   - `FIREBASE_AUTH_EMAIL` = `laieta@hoopslam.net`
   - `FIREBASE_AUTH_PASSWORD` = la contraseña actual de ese usuario (está en tu `.env.local`)
   `/api/firebase-token` las entrega solo a usuarios con sesión de Supabase válida, nunca a visitantes anónimos. ← **único bloqueo para el push**
@@ -33,15 +33,16 @@ Todo este bloque queda a la espera de quien tenga la cuenta de Google propietari
 
 > Comprobado 2026-10-02: Firestore **exige autenticación** (todas las colecciones devuelven 403 sin credenciales), por eso no se puede desplegar sin alguno de los dos métodos.
 
-## 4. Desplegar
+## 4. Desplegar — ✅ 2026-10-02
 
-- [ ] `git push` (el commit de remediación ya está hecho en local).
-- [ ] Vercel desplegará automáticamente desde `master`.
+- [x] `git push` (427b734..8c547d3) → Vercel desplegó desde `master`.
 
 ## 5. Verificación en producción
 
+- [x] `/login` carga sin errores de consola; bundle nuevo con code-splitting (~254 kB de JS inicial).
+
 - [ ] Login de gestor → aterriza en su dashboard; KPIs cargan con datos reales.
-- [ ] `curl -X POST https://hoop-slam-gyms.vercel.app/api/invite-gestor` sin token → **401**.
+- [x] `invite/update/delete-gestor` y `firebase-token` sin token o con token falso → **401** (verificado en producción).
 - [ ] Crear un ticket de mantenimiento → recargar → sigue ahí (fila en `maintenance_tickets`).
 - [ ] Editar teléfono/horarios del club → recargar → persiste.
 - [ ] Como gestor, visitar `/gym/otro/dashboard` → rebota.
