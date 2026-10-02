@@ -1,7 +1,8 @@
 import type { VercelRequest } from '@vercel/node';
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? 'https://afhxzrnylpvjgtlewflq.supabase.co';
-const ANON_KEY = process.env.SUPABASE_ANON_KEY ?? '';
+// La anon key es pública; se reutiliza la del cliente si no hay una server-only.
+const ANON_KEY = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? '';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 
 export interface AuthCaller {

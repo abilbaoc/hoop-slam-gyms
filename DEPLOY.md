@@ -4,11 +4,12 @@
 El código nuevo exige env vars que aún no existen en Vercel; desplegar antes rompería
 la autenticación de Firebase y los endpoints de gestores en producción.
 
-## 1. Supabase (dashboard → proyecto `afhxzrnylpvjgtlewflq`)
+## 1. Supabase (dashboard → proyecto `afhxzrnylpvjgtlewflq`) — ✅ COMPLETADO 2026-10-01
 
-- [ ] **SQL Editor**: ejecutar `supabase/migrations/007_gym_profile.sql` (policies por slug de `gyms` + seed del club Laietà). Verificar antes que 001-006 están aplicadas (`select * from gyms limit 1;` y `select * from maintenance_tickets limit 1;` no deben dar "relation does not exist").
-- [ ] **Authentication → Sign In / Up**: desactivar **Enable Sign Up** (el alta es solo por invitación).
-- [ ] **Table Editor → profiles**: verificar que cada gestor tiene `gym_ids = ['laieta']`. Con el nuevo control de acceso, un gestor sin club va a la pantalla "pendiente de asignación".
+- [x] **El proyecto estaba PAUSADO** (free tier, inactividad) — reanudado y restaurado. Nota: en plan free se volverá a pausar tras ~1 semana sin tráfico; valorar upgrade a Pro o un ping periódico.
+- [x] **SQL Editor**: migración `007_gym_profile.sql` ejecutada (policies por slug + seed `laieta`). Migraciones 001-006 verificadas (las 11 tablas existen).
+- [x] **Authentication → Sign In / Up**: **Enable Sign Up desactivado**.
+- [x] **profiles**: gestores reales (`cole.ferreiro@` y `lluis.garcia@hoopslam.net`) asignados a `gym_ids=['laieta']`. Quedan ~6 perfiles de prueba ("a", "aaaaaa", "Helllo", etc.) y 3 gyms basura ("a", "laiet", "paquito") — recomendable borrarlos desde Admin → Gestores cuando el deploy esté hecho.
 
 ## 2. Firebase (console → proyecto `hoopslam-a6c30`)
 
@@ -16,13 +17,13 @@ la autenticación de Firebase y los endpoints de gestores en producción.
 - [ ] **Firestore → Rules**: verificar que todas las colecciones (`courts`, `reservations`, `users`, `stats`, `court_blocks`, `court_incidents`) exigen `request.auth != null`.
 - [ ] **Authentication → Users**: rotar la contraseña de `laieta@hoopslam.net` (la actual está quemada en bundles ya publicados). Actualizarla en tu `.env.local` (solo dev).
 
-## 3. Vercel (dashboard → hoop-slam-gyms → Settings → Environment Variables)
+## 3. Vercel (dashboard → hoop-slam-gyms → Settings → Environment Variables) — casi completo 2026-10-02
 
-- [ ] Re-guardar las variables que tienen un salto de línea al final del valor (se ven como `hoopslam-a6c30\n`): `VITE_DATA_SOURCE`, `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`.
-- [ ] Añadir `SUPABASE_ANON_KEY` (mismo valor que `VITE_SUPABASE_ANON_KEY`).
-- [ ] Verificar que existen `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`.
-- [ ] Añadir `FIREBASE_SERVICE_ACCOUNT` = contenido completo del JSON del paso 2 (una sola línea).
-- [ ] **Eliminar** `VITE_FIREBASE_AUTH_EMAIL` y `VITE_FIREBASE_AUTH_PASSWORD`.
+- [x] Saltos de línea `\n`: **falsa alarma** — revisados en el dashboard (`VITE_DATA_SOURCE` = `firebase` limpio, `SUPABASE_SERVICE_ROLE_KEY` limpio). El `\n` solo estaba en el `.env.vercel` local, ya corregido.
+- [x] `SUPABASE_ANON_KEY`: ya no hace falta — `api/_auth.ts` reutiliza `VITE_SUPABASE_ANON_KEY` (existente).
+- [x] `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` existen. (Vercel marca la service role key como "Needs Attention": está guardada como *Config* legible; recomendable cambiarla a tipo *Secret*.)
+- [x] **Eliminadas** `VITE_FIREBASE_AUTH_EMAIL` y `VITE_FIREBASE_AUTH_PASSWORD`. (El deploy actual sigue funcionando porque las lleva compiladas; la contraseña sigue siendo válida en Firebase hasta rotarla — paso 2.)
+- [ ] **Añadir `FIREBASE_SERVICE_ACCOUNT`** = contenido completo del JSON del paso 2 (una sola línea), tipo *Secret*, entorno Production. ← **único bloqueo para el push**
 
 ## 4. Desplegar
 
