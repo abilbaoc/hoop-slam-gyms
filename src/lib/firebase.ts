@@ -39,9 +39,11 @@ export function getDb(): Firestore {
 }
 
 /**
- * Signs in to Firebase via a custom token minted by /api/firebase-token
- * (authenticated with the caller's Supabase JWT), so no Firebase credential
- * ships in the client bundle. Falls back to email/password only in local dev.
+ * Signs in to Firebase through /api/firebase-token (authenticated with the
+ * caller's Supabase JWT), so no Firebase credential ships in the client bundle.
+ * The endpoint answers with a custom token, or with the shared dashboard
+ * credentials while no service account is configured. Falls back to
+ * .env.local credentials only in local dev.
  */
 export function ensureFirebaseAuth(): Promise<void> {
   if (_authReady) return _authReady;
@@ -50,14 +52,19 @@ export function ensureFirebaseAuth(): Promise<void> {
     _authReady = Promise.resolve();
     return _authReady;
   }
-  _authReady = signInWithCustomTokenFlow(_auth).catch(async (err: Error) => {
-    console.error('[Firebase] Custom token auth failed:', err.message);
-    if (import.meta.env.DEV) await devPasswordFallback(_auth!);
+  _authReady = signInViaServer(_auth).catch(async (err: Error) => {
+    console.error('[Firebase] Server-brokered auth failed:', err.message);
+    if (import.meta.env.DEV) {
+      await devPasswordFallback(_auth!);
+      if (_auth!.currentUser) return;
+    }
+    // Do not cache the failure: a later call (e.g. after logging in) retries.
+    _authReady = null;
   });
   return _authReady;
 }
 
-async function signInWithCustomTokenFlow(auth: Auth): Promise<void> {
+async function signInViaServer(auth: Auth): Promise<void> {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase session unavailable');
   }
@@ -73,8 +80,14 @@ async function signInWithCustomTokenFlow(auth: Auth): Promise<void> {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `firebase-token respondio ${res.status}`);
   }
-  const { token } = await res.json();
-  await signInWithCustomToken(auth, token);
+  const body = (await res.json()) as { token?: string; email?: string; password?: string };
+  if (body.token) {
+    await signInWithCustomToken(auth, body.token);
+  } else if (body.email && body.password) {
+    await signInWithEmailAndPassword(auth, body.email, body.password);
+  } else {
+    throw new Error('firebase-token devolvio una respuesta inesperada');
+  }
 }
 
 /** DEV-only fallback: shared credentials from .env.local (never bundled in prod). */
