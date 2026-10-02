@@ -24,6 +24,8 @@ const PrivacyPolicyPage = lazy(() => import('./pages/Privacy/PrivacyPolicyPage')
 const NotificationsPage = lazy(() => import('./pages/Notifications/NotificationsPage'));
 const AdminClubsPage = lazy(() => import('./pages/Admin/AdminClubsPage'));
 const AdminGestoresPage = lazy(() => import('./pages/Admin/AdminGestoresPage'));
+// Hidden test feature: reachable by URL only, intentionally not in Sidebar/MobileNav.
+const LedLabPage = lazy(() => import('./pages/LedLab/LedLabPage'));
 
 function RouteFallback() {
   return (
@@ -88,6 +90,7 @@ function AppRoutes() {
         <Route path="profile" element={<GymProfilePage />} />
         <Route path="maintenance" element={<MaintenancePage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="lab" element={<LedLabPage />} />
         <Route index element={<Navigate to="dashboard" replace />} />
       </Route>
     </Routes>

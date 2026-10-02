@@ -19,17 +19,18 @@ export default function TopBar() {
   }, [gymId]);
 
   return (
-    <header className="sticky top-0 z-30 h-16 bg-black/80 backdrop-blur-md border-b border-[#2C2C2E] flex items-center justify-between px-6">
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-30 h-16 bg-black/80 backdrop-blur-md border-b border-[#2C2C2E] flex items-center justify-between gap-2 px-4 sm:px-6">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
         <h1 className="text-lg font-semibold text-white lg:hidden leading-none truncate">{gym.name}</h1>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0">
         {/* Theme toggle */}
         <button
           onClick={toggle}
           className="p-2 rounded-xl text-[#8E8E93] hover:text-white hover:bg-[#1C1C1E] transition-colors"
           title={theme === 'dark' ? 'Modo día' : 'Modo noche'}
+          aria-label={theme === 'dark' ? 'Activar modo día' : 'Activar modo noche'}
         >
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
@@ -37,6 +38,7 @@ export default function TopBar() {
         {/* Notification bell */}
         <button
           onClick={() => navigate(`/gym/${gymId}/notifications`)}
+          aria-label={unreadCount > 0 ? `Notificaciones (${unreadCount} sin leer)` : 'Notificaciones'}
           className="relative p-2 rounded-xl text-[#8E8E93] hover:text-white hover:bg-[#1C1C1E] transition-colors"
         >
           <Bell size={20} />
@@ -50,7 +52,7 @@ export default function TopBar() {
         {/* User */}
         {currentUser && (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#7BFF00] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-full bg-[#7BFF00] flex items-center justify-center flex-shrink-0">
               <span className="text-black font-bold text-sm">{currentUser.avatarInitials}</span>
             </div>
             <div className="hidden sm:block">
@@ -65,6 +67,7 @@ export default function TopBar() {
           onClick={() => { signOut(); navigate('/login'); }}
           className="p-2 rounded-xl text-[#636366] hover:text-white hover:bg-[#1C1C1E] transition-colors"
           title="Cerrar sesion"
+          aria-label="Cerrar sesión"
         >
           <LogOut size={18} />
         </button>
