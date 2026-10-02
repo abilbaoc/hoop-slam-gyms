@@ -25,7 +25,7 @@ Las notificaciones se **derivan** de datos reales (incidencias + tickets); el es
 ## Autenticación y roles
 
 - Login con Supabase Auth (email + contraseña). **No hay registro público** — los usuarios se crean por invitación desde Admin → Gestores.
-- La sesión de Firebase del navegador se obtiene vía `/api/firebase-token` (custom token firmado server-side con `FIREBASE_SERVICE_ACCOUNT`); no viajan credenciales de Firebase en el bundle.
+- La sesión de Firebase del navegador se obtiene vía `/api/firebase-token`, que solo responde a usuarios con sesión de Supabase: con `FIREBASE_SERVICE_ACCOUNT` emite un custom token por usuario; sin él, entrega las credenciales compartidas `FIREBASE_AUTH_EMAIL/PASSWORD` (server-only). En ningún caso viajan credenciales en el bundle público.
 - Roles: `admin` (todo), `gestor` (su club), `staff` (reservas de su club). Permisos en `src/types/auth.ts`; el acceso por club se comprueba en `GymLayout` (`canAccessGym`).
 
 ## Endpoints serverless (`api/`)
@@ -35,7 +35,7 @@ Todos exigen un JWT de Supabase en `Authorization: Bearer` (ver `api/_auth.ts`):
 - `POST /api/invite-gestor` — crea usuario + perfil (solo admin)
 - `POST /api/update-gestor` — cambia rol / club asignado (solo admin)
 - `POST /api/delete-gestor` — elimina usuario (solo admin, no a sí mismo)
-- `POST /api/firebase-token` — emite custom token de Firebase (cualquier usuario autenticado)
+- `POST /api/firebase-token` — custom token de Firebase o credenciales compartidas (cualquier usuario autenticado)
 
 Edge function de Supabase: `notify-hoop-on-ticket` (notifica al equipo Hoop los tickets high/critical).
 
@@ -61,7 +61,10 @@ VITE_FIREBASE_APP_ID=…
 SUPABASE_URL=…
 SUPABASE_ANON_KEY=…
 SUPABASE_SERVICE_ROLE_KEY=…
-FIREBASE_SERVICE_ACCOUNT={"type":"service_account",…}   # JSON completo
+FIREBASE_SERVICE_ACCOUNT={"type":"service_account",…}   # JSON completo (preferido)
+# …o, mientras no haya service account:
+FIREBASE_AUTH_EMAIL=…
+FIREBASE_AUTH_PASSWORD=…
 ```
 
 Solo desarrollo local (fallback DEV de auth Firebase, nunca en Vercel): `VITE_FIREBASE_AUTH_EMAIL`, `VITE_FIREBASE_AUTH_PASSWORD`.
