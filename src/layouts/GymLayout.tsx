@@ -1,5 +1,6 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import { Outlet, useParams, Navigate } from 'react-router-dom';
+import { Outlet, useParams, Navigate, Link, useLocation } from 'react-router-dom';
+import { Lock, SearchX } from 'lucide-react';
 import type { Gym } from '../types/gym';
 import { getGymById } from '../data/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,25 +21,41 @@ export function useGymLayout() {
   return ctx;
 }
 
+function GateScreen({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-black flex items-center justify-center p-6">
+      <div className="max-w-sm text-center space-y-4">
+        <div className="w-14 h-14 rounded-full bg-[#2C2C2E] flex items-center justify-center mx-auto">{icon}</div>
+        <h1 className="text-2xl text-white">{title}</h1>
+        <div className="text-sm text-[#8E8E93] space-y-2">{children}</div>
+        <Link to="/" className="inline-block text-sm text-[#7BFF00] hover:underline">Ir a mi inicio</Link>
+      </div>
+    </div>
+  );
+}
+
 export default function GymLayout() {
   const { gymId } = useParams<{ gymId: string }>();
-  const { isAuthenticated, currentUser, updateUserGymIds, canAccessGym } = useAuth();
-  const [gym, setGym] = useState<Gym | null | undefined>(undefined); // undefined=loading, null=not found
+  const location = useLocation();
+  const { isAuthenticated, currentUser, canAccessGym } = useAuth();
+  // Result tagged with the gymId it belongs to: switching clubs reads as "loading" until the new one arrives.
+  const [loaded, setLoaded] = useState<{ key: string; gym: Gym | null } | null>(null);
+  const gym: Gym | null | undefined = loaded && loaded.key === gymId ? loaded.gym : undefined; // undefined=loading, null=not found
 
   useEffect(() => {
-    if (gymId) {
-      getGymById(gymId).then(g => setGym(g ?? null));
-    }
-  }, [gymId]);
+    if (!gymId || !isAuthenticated) return;
+    let cancelled = false;
+    getGymById(gymId)
+      .then((g) => { if (!cancelled) setLoaded({ key: gymId, gym: g ?? null }); })
+      .catch((err) => {
+        console.error('[GymLayout] getGymById:', err);
+        if (!cancelled) setLoaded({ key: gymId, gym: null });
+      });
+    return () => { cancelled = true; };
+  }, [gymId, isAuthenticated]);
 
-  // Clear stale gymIds when the gym no longer exists in the DB
-  useEffect(() => {
-    if (gym === null && currentUser?.role !== 'admin' && (currentUser?.gymIds?.length ?? 0) > 0) {
-      updateUserGymIds([]);
-    }
-  }, [gym]);
-
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  // Remember the requested page (e.g. /gym/laieta/lab) so login brings the user back to it.
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />;
 
   if (gym === undefined) {
     return (
@@ -50,11 +67,27 @@ export default function GymLayout() {
 
   if (!gym) {
     if (currentUser?.role === 'admin') return <Navigate to="/admin/clubs" replace />;
-    if (currentUser?.role === 'staff') return <Navigate to="/pending" replace />;
-    return <Navigate to="/login" replace />;
+    return (
+      <GateScreen icon={<SearchX size={26} className="text-[#8E8E93]" />} title="Club no encontrado">
+        <p>
+          No existe ningún club con el identificador <span className="text-white font-mono">{gymId}</span>, o no se ha
+          podido cargar ahora mismo. Revisa el enlace o vuelve a intentarlo en unos minutos.
+        </p>
+      </GateScreen>
+    );
   }
 
-  if (!canAccessGym(gym.id)) return <Navigate to="/" replace />;
+  if (!canAccessGym(gym.id)) {
+    return (
+      <GateScreen icon={<Lock size={24} className="text-[#8E8E93]" />} title="Sin acceso a este club">
+        <p>
+          Tu cuenta <span className="text-white">{currentUser?.email}</span> no está asignada a{' '}
+          <span className="text-white">{gym.name}</span>.
+        </p>
+        <p>Pide a un administrador que te asigne a este club desde Admin → Gestores.</p>
+      </GateScreen>
+    );
+  }
 
   return (
     <GymLayoutContext.Provider value={{ gym, gymId: gym.id }}>

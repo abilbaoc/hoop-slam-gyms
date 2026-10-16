@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Shield, Building2, UserCircle, Loader2, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
@@ -9,6 +9,14 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import Card from '../../components/ui/Card';
 import { toast } from 'sonner';
+
+/** Where to go after logging in: the protected page that sent us here, or home. */
+function useRedirectTarget(): string {
+  const location = useLocation();
+  const from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
+  if (!from?.pathname || from.pathname === '/login') return '/';
+  return from.pathname + (from.search ?? '');
+}
 
 // ── Mock Login (redesigned: 1-click per role) ──
 
@@ -22,11 +30,12 @@ function MockLogin() {
   const [expandedRole, setExpandedRole] = useState<UserRole | null>(null);
   const { loginMock } = useAuth();
   const navigate = useNavigate();
+  const target = useRedirectTarget();
 
   const handleRoleClick = (role: UserRole) => {
     if (role === 'admin') {
       loginMock?.(role);
-      navigate('/');
+      navigate(target, { replace: true });
       return;
     }
     setExpandedRole(expandedRole === role ? null : role);
@@ -35,7 +44,7 @@ function MockLogin() {
   const handleGymSelect = (role: UserRole, gymId: string) => {
     if (!loginMock) return;
     loginMock(role, gymId);
-    navigate('/');
+    navigate(target, { replace: true });
   };
 
   return (
@@ -119,6 +128,7 @@ function SupabaseLogin() {
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const target = useRedirectTarget();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,7 +137,7 @@ function SupabaseLogin() {
     setLoading(true);
     const result = await signIn(email, password);
     setLoading(false);
-    if (result.error) { setError(result.error); } else { navigate('/'); }
+    if (result.error) { setError(result.error); } else { navigate(target, { replace: true }); }
   };
 
   const handleForgotPassword = async () => {
@@ -168,6 +178,10 @@ function SupabaseLogin() {
 // ── Login Page Shell ──
 
 export default function LoginPage() {
+  const { isAuthenticated } = useAuth();
+  const target = useRedirectTarget();
+  if (isAuthenticated) return <Navigate to={target} replace />;
+
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
       <div className="w-full max-w-lg space-y-6">

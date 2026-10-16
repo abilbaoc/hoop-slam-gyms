@@ -196,11 +196,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string): Promise<{ error?: string }> => {
     if (!supabase) return { error: 'Supabase no configurado' };
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       if (error.message.includes('Invalid login credentials')) return { error: 'Credenciales invalidas' };
       if (error.message.includes('Email not confirmed')) return { error: 'Confirma tu email antes de iniciar sesion' };
-      return { error: 'Error de conexion. Intenta de nuevo.' };
+      return { error: 'No se pudo conectar con el servidor. Intenta de nuevo en unos minutos.' };
+    }
+    // Load the profile before resolving, so callers can navigate straight to a
+    // protected page without being bounced back to /login by a not-yet-set user.
+    if (data.user) {
+      const user = await fetchProfile(data.user.id, data.user.email ?? email);
+      if (!user) return { error: 'No se pudo cargar tu perfil. Intenta de nuevo.' };
+      setCurrentUser(user);
     }
     return {};
   }, []);

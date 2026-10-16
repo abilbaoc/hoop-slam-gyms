@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import GymLayout from './layouts/GymLayout';
 import AdminLayout from './layouts/AdminLayout';
 import LoginPage from './pages/Auth/LoginPage';
@@ -52,7 +52,8 @@ function RootRedirect() {
 /** Guard: solo usuarios con role === 'admin' pueden acceder a rutas /admin/* */
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { currentUser, isAuthenticated } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />;
   if (currentUser?.role !== 'admin') return <Navigate to="/" replace />;
   return <>{children}</>;
 }
