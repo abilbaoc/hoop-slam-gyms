@@ -22,8 +22,28 @@ export const isFirebaseConfigured =
 
 let _app: FirebaseApp | null = null;
 let _db: Firestore | null = null;
-let _auth: Auth | null = null;
 let _authReady: Promise<void> | null = null;
+let _lastFailureAt = 0;
+let _lastAuthErrorCode: string | null = null;
+const AUTH_RETRY_AFTER_MS = 15_000;
+
+/** Human-readable reason when Firebase sign-in failed, for error screens. */
+export function describeFirebaseAuthProblem(): string | null {
+  switch (_lastAuthErrorCode) {
+    case null:
+      return null;
+    case 'auth/too-many-requests':
+      return 'Firebase ha bloqueado temporalmente el acceso por demasiados intentos. Espera unos minutos y reintenta.';
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Las credenciales de Firebase del servidor no son válidas (revisar FIREBASE_AUTH_* en Vercel).';
+    case 'auth/network-request-failed':
+      return 'No se pudo contactar con Firebase. Comprueba tu conexión.';
+    default:
+      return `No se pudo iniciar sesión en Firebase (${_lastAuthErrorCode}).`;
+  }
+}
 
 export function getFirebaseApp(): FirebaseApp {
   if (!isFirebaseConfigured) throw new Error('Firebase no está configurado. Revisa las variables VITE_FIREBASE_* en .env');
@@ -47,20 +67,34 @@ export function getDb(): Firestore {
  */
 export function ensureFirebaseAuth(): Promise<void> {
   if (_authReady) return _authReady;
-  _auth = getAuth(getFirebaseApp());
-  if (_auth.currentUser) {
-    _authReady = Promise.resolve();
-    return _authReady;
-  }
-  _authReady = signInViaServer(_auth).catch(async (err: Error) => {
-    console.error('[Firebase] Server-brokered auth failed:', err.message);
-    if (import.meta.env.DEV) {
-      await devPasswordFallback(_auth!);
-      if (_auth!.currentUser) return;
-    }
-    // Do not cache the failure: a later call (e.g. after logging in) retries.
-    _authReady = null;
-  });
+  // After a failure, wait before signing in again: every query calls this, and
+  // retrying on each one makes Firebase lock the shared account
+  // (auth/too-many-requests) for every user of the dashboard.
+  if (Date.now() - _lastFailureAt < AUTH_RETRY_AFTER_MS) return Promise.resolve();
+  const auth = getAuth(getFirebaseApp());
+  _authReady = (async () => {
+    // Restore the session persisted in the browser before deciding to sign in.
+    await auth.authStateReady();
+    if (auth.currentUser) return;
+    await signInViaServer(auth);
+  })()
+    .then(() => {
+      _lastAuthErrorCode = null;
+    })
+    .catch(async (err: Error & { code?: string }) => {
+      console.error('[Firebase] Server-brokered auth failed:', err.message);
+      _lastAuthErrorCode = err.code ?? 'unknown';
+      if (import.meta.env.DEV) {
+        await devPasswordFallback(auth);
+        if (auth.currentUser) {
+          _lastAuthErrorCode = null;
+          return;
+        }
+      }
+      // Not cached forever: a later call (e.g. after logging in) retries, after the backoff.
+      _lastFailureAt = Date.now();
+      _authReady = null;
+    });
   return _authReady;
 }
 
