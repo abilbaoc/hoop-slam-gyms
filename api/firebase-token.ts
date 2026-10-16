@@ -21,8 +21,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store');
 
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
-  const sharedEmail = process.env.FIREBASE_AUTH_EMAIL;
-  const sharedPassword = process.env.FIREBASE_AUTH_PASSWORD;
+  // Trimmed: values pasted into the Vercel dashboard easily pick up a trailing
+  // space or newline, which Firebase rejects as auth/invalid-credential.
+  const sharedEmail = process.env.FIREBASE_AUTH_EMAIL?.trim();
+  const sharedPassword = process.env.FIREBASE_AUTH_PASSWORD?.trim();
 
   if (!serviceAccountJson && !(sharedEmail && sharedPassword)) {
     return res.status(500).json({ error: 'Firebase auth not configured on the server' });
